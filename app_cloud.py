@@ -93,7 +93,7 @@ def login_panel():
                     "email": rec.get("email", "")
                 }
                 st.success(f"Ingelogd als {display_name}")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Ongeldige gebruikersnaam/wachtwoord")
         else:
@@ -105,7 +105,7 @@ user = login_panel()
 st.sidebar.success(f"👤 Ingelogd als **{user['name']}**")
 if st.sidebar.button("Logout"):
     st.session_state["auth_user"] = None
-    st.experimental_rerun()
+    st.rerun()
 # ------------------------------------------------------------
 # [End] Auth
 # ------------------------------------------------------------
@@ -1027,5 +1027,6 @@ elif page == "Audit":
 # ------------------------------------------------------------
 # [End] Pages
 # ------------------------------------------------------------
+
 
 
