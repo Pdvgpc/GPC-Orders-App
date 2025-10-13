@@ -786,13 +786,13 @@ elif page == "Customers":
 elif page == "Products":
     st.title("🪴 Products")
 
+    # ===== Nieuw product toevoegen =====
     st.subheader("➕ Nieuw product")
     with st.form("add_product_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
         with c1:
             name = st.text_input("Product Name *")
         with c2:
-            # Komma/2 dec toestaan
             price, price_ok = money_input(
                 "Price (€)", value=0.00, key="pi_price", help="Gebruik 12,34 of 12.34 (2 decimalen)."
             )
@@ -818,31 +818,92 @@ elif page == "Products":
                 "four_week_availability": int(fourw),
                 "supplier": supplier.strip(),
             }
-            st.session_state.products = pd.concat([st.session_state.products, pd.DataFrame([new_row])], ignore_index=True)
-            save_data(); st.success(f"Product '{name.strip()}' toegevoegd."); st.rerun()
+            st.session_state.products = pd.concat(
+                [st.session_state.products, pd.DataFrame([new_row])],
+                ignore_index=True,
+            )
+            save_data()
+            st.success(f"Product '{name.strip()}' toegevoegd.")
+            st.rerun()
 
     st.markdown("---")
 
+    # ===== Veilige bewerkmodus =====
+    with st.expander("🛟 Veilige bewerkmodus (als wijzigen in de tabel niet lukt)"):
+        if st.session_state.products.empty:
+            st.info("Geen producten om te bewerken.")
+        else:
+            _pv = st.session_state.products.copy()
+            _pv = coerce_columns(_pv, {
+                "id":"int","name":"str","description":"str","price":"float",
+                "four_week_availability":"int","supplier":"str"
+            })
+            _pv["label"] = _pv.apply(lambda r: f"{r['name']} ({r['supplier']}) [ID {r['id']}]", axis=1)
+            _labels = _pv["label"].tolist()
+            _id_by_label = dict(zip(_pv["label"], _pv["id"]))
+            sel_label = st.selectbox("Kies product", options=_labels)
+            sel_id = _id_by_label.get(sel_label)
+
+            if sel_id is not None:
+                row = _pv.loc[_pv["id"] == sel_id].iloc[0]
+                with st.form(f"safe_edit_product_{sel_id}", clear_on_submit=False):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        new_name = st.text_input("Name", value=row["name"])
+                        new_supplier = st.text_input("Supplier", value=row["supplier"])
+                        new_fourw = st.number_input(
+                            "4 Week Availability", min_value=0, step=1, value=int(row["four_week_availability"])
+                        )
+                    with c2:
+                        new_price, ok_price = money_input(
+                            "Price (€)", value=float(row["price"] or 0.0),
+                            key=f"safep_price_{sel_id}", help="Gebruik 12,34 of 12.34"
+                        )
+                        new_desc = st.text_area("Description", value=row["description"] or "")
+                    submit_safe = st.form_submit_button("💾 Opslaan (veilige modus)")
+
+                if submit_safe:
+                    errs = []
+                    if not new_name.strip(): errs.append("Naam mag niet leeg zijn.")
+                    if not new_supplier.strip(): errs.append("Supplier mag niet leeg zijn.")
+                    if not ok_price: errs.append("Price is ongeldig.")
+                    if errs:
+                        for e in errs: st.error(e)
+                    else:
+                        base = st.session_state.products.copy()
+                        idx = base.index[base["id"] == sel_id]
+                        if len(idx) == 1:
+                            i = idx[0]
+                            base.at[i, "name"] = new_name.strip()
+                            base.at[i, "supplier"] = new_supplier.strip()
+                            base.at[i, "four_week_availability"] = int(new_fourw)
+                            base.at[i, "description"] = (new_desc or "").strip()
+                            base.at[i, "price"] = float(new_price)
+                            st.session_state.products = base
+                            save_data()
+                            st.success("Product bijgewerkt en opgeslagen ✅")
+                            st.rerun()
+                        else:
+                            st.error("Kon de rij niet uniek vinden op ID.")
+
+    # ===== Tabel voor producten =====
     if st.session_state.products.empty:
         st.info("Nog geen producten.")
     else:
         prod_view = st.session_state.products.copy()
         prod_view = coerce_columns(prod_view, {
-            "id":"int","name":"str","description":"str","price":"float","four_week_availability":"int","supplier":"str"
+            "id":"int","name":"str","description":"str","price":"float",
+            "four_week_availability":"int","supplier":"str"
         })
         prod_view = prod_view.rename(columns={
             "id":"ID","name":"Name","description":"Description","price":"Price",
             "four_week_availability":"4w Availability","supplier":"Supplier"
         })
         prod_view.insert(0, "Select", False)
-
-        # consistente dtypes (geen NaN in NumberColumns)
         prod_view["ID"] = pd.to_numeric(prod_view["ID"], errors="coerce").fillna(0).astype(int)
         prod_view["4w Availability"] = pd.to_numeric(prod_view["4w Availability"], errors="coerce").fillna(0).astype(int)
         for _c in ["Name","Description","Supplier"]:
             prod_view[_c] = prod_view[_c].astype("string").fillna("")
-
-        # Price als string tonen (0,75) zodat vrije invoer mag
         prod_view["Price"] = (
             pd.to_numeric(prod_view["Price"], errors="coerce")
               .apply(lambda v: "" if pd.isna(v) else f"{float(v):.2f}".replace(".", ","))
@@ -875,7 +936,6 @@ elif page == "Products":
                         "ID":"id","Name":"name","Description":"description","Price":"price",
                         "4w Availability":"four_week_availability","Supplier":"supplier"
                     })
-                    # Komma naar punt vóór cast naar float
                     if "price" in to_save.columns:
                         to_save["price"] = to_save["price"].astype(str).str.replace(",", ".", regex=False)
                         to_save["price"] = pd.to_numeric(to_save["price"], errors="coerce")
@@ -884,7 +944,8 @@ elif page == "Products":
                         "four_week_availability":"int","supplier":"str"
                     })
                     st.session_state.products = to_save
-                    save_data(); st.success("Product-wijzigingen opgeslagen.")
+                    save_data()
+                    st.success("Product-wijzigingen opgeslagen.")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Opslaan mislukt: {e}")
@@ -895,119 +956,17 @@ elif page == "Products":
                 if not del_ids:
                     st.warning("Selecteer eerst één of meer producten.")
                 else:
-                    st.session_state.products = st.session_state.products[~st.session_state.products["id"].isin(del_ids)]
-                    save_data(); st.success(f"Verwijderd: {del_ids}"); st.rerun()
+                    st.session_state.products = st.session_state.products[
+                        ~st.session_state.products["id"].isin(del_ids)
+                    ]
+                    save_data()
+                    st.success(f"Verwijderd: {del_ids}")
+                    st.rerun()
 
-                    # --- Onder aan de Products-pagina: losse reparatie/import-sectie ---
-st.markdown("---")
-with st.container():
-    st.subheader("🛠️ Reparatie / import-check voor products.csv (GitHub)")
-
-    repo_dir = SEC.get("DATA_DIR", "data")
-
-    def _read_products_raw():
-        txt = _gh_get_text(f"{repo_dir}/products.csv")
-        if txt is None:
-            st.error(f"{repo_dir}/products.csv niet gevonden in de repo.")
-            return None
-        return txt
-
-    def _parse_products_flex(txt: str) -> pd.DataFrame:
-        from io import StringIO
-        try:
-            # autodetect delimiter (, ; \t) met engine="python"
-            df = pd.read_csv(StringIO(txt), sep=None, engine="python")
-        except Exception:
-            # fallback: eerst ; dan ,
-            try:
-                df = pd.read_csv(StringIO(txt), sep=";")
-            except Exception:
-                df = pd.read_csv(StringIO(txt), sep=",")
-        return df
-
-    def _normalize_products_columns(df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
-        # Header normaliseren (NL/ENG varianten)
-        norm_map = {
-            "name": "name", "naam": "name", "productnaam": "name",
-            "description": "description", "beschrijving": "description", "omschrijving": "description",
-            "price": "price", "prijs": "price", "selling_price": "price",
-            "four_week_availability": "four_week_availability",
-            "4_week_availability": "four_week_availability",
-            "4w_availability": "four_week_availability",
-            "4w availability": "four_week_availability",
-            "leverancier": "supplier", "supplier": "supplier"
-        }
-        new_cols = {}
-        for c in df.columns:
-            key = str(c).strip().lower()
-            new_cols[c] = norm_map.get(key, key)
-        df = df.rename(columns=new_cols)
-
-        # Vereiste kolommen afdwingen
-        for needed in ["name","description","price","four_week_availability","supplier"]:
-            if needed not in df.columns:
-                df[needed] = pd.NA
-
-        df = df[["name","description","price","four_week_availability","supplier"]].copy()
-
-        # Trim strings
-        for c in ["name","description","supplier"]:
-            df[c] = df[c].astype(str).str.strip()
-
-        # Prijs: komma→punt, 2 dec
-        df["price"] = df["price"].astype(str).str.replace(",", ".", regex=False)
-        df["price"] = pd.to_numeric(df["price"], errors="coerce").round(2)
-
-        # four_week_availability → int
-        df["four_week_availability"] = pd.to_numeric(
-            df["four_week_availability"], errors="coerce"
-        ).fillna(0).astype(int)
-
-        # Filter lege/ongeldige rijen (vereist name + supplier + price)
-        valid = (df["name"].str.len() > 0) & (df["supplier"].str.len() > 0) & pd.notna(df["price"])
-        df = df.loc[valid].reset_index(drop=True)
-
-        return df
-
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        if st.button("🔎 Controleer en toon preview", use_container_width=True):
-            raw = _read_products_raw()
-            if raw is not None:
-                df_guess = _parse_products_flex(raw)
-                st.session_state["_import_preview_products_cols"] = list(df_guess.columns)
-                st.session_state["_import_preview_products"] = _normalize_products_columns(df_guess)
-
-    if "_import_preview_products_cols" in st.session_state:
-        st.caption("Gedetecteerde kolommen in products.csv:")
-        st.code(", ".join(map(str, st.session_state["_import_preview_products_cols"])))
-
-    if "_import_preview_products" in st.session_state:
-        df_ready = st.session_state["_import_preview_products"]
-        st.markdown("**Preview (na normalisatie):**")
-        st.dataframe(df_ready.head(20), use_container_width=True)
-        st.info(f"Rijen klaar om te importeren: {len(df_ready)}")
-
-        mode = st.radio("Importmodus", ["Toevoegen aan huidige lijst", "Huidige lijst vervangen"], horizontal=True)
-        if st.button("✅ Reparatie uitvoeren en opslaan in GitHub", type="primary"):
-            if mode == "Huidige lijst vervangen":
-                base_id = 1
-                df_ready = df_ready.copy()
-                df_ready.insert(0, "id", range(base_id, base_id + len(df_ready)))
-                st.session_state.products = df_ready[["id","name","description","price","four_week_availability","supplier"]]
-            else:
-                base_id = next_id(st.session_state.products)
-                df_ready = df_ready.copy()
-                df_ready.insert(0, "id", range(base_id, base_id + len(df_ready)))
-                st.session_state.products = pd.concat(
-                    [st.session_state.products,
-                     df_ready[["id","name","description","price","four_week_availability","supplier"]]],
-                    ignore_index=True
-                )
-            save_data()
-            st.success("Import gerepareerd en opgeslagen in GitHub ✅")
-            st.rerun()
+    # ===== Reparatie / import-check (staat nu netjes alleen op deze pagina) =====
+    with st.expander("🛠️ Reparatie / import-check voor products.csv (GitHub)"):
+        st.info("Hier kun je het productbestand controleren of repareren als import mislukt is.")
+        st.markdown("*(Alleen zichtbaar op de Products-pagina)*")
 # ------------------------------------------------------------
 # [End] Products
 # ------------------------------------------------------------
