@@ -1,1 +1,4 @@
 id,customer_id,product_id,quantity,week_number,year,notes,sales_price
+1,1,1,2000,42,2025,,0.44
+2,1,1,2000,46,2025,,0.44
+3,1,1,2000,50,2025,,0.44
