@@ -1,0 +1,15 @@
+credentials:
+  usernames:
+    pieter:
+      email: pieter@greenplantcuttings.com
+      name: "Pieter"
+      password_plain: "Pieter123!"   # <-- verander dit
+    bert:
+      email: bert@greenplantcuttings.com
+      name: "Bert"
+      password_plain: "Bert123!"     # <-- verander dit
+
+cookie:
+  name: gpc_auth
+  key: "change_this_secret_key_please"
+  expiry_days: 14
