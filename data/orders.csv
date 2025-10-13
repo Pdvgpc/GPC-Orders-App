@@ -36,3 +36,4 @@ id,customer_id,product_id,quantity,week_number,year,notes,sales_price
 35,1,52,3400,42,2025,,0.17
 36,1,52,2300,46,2025,,0.17
 37,1,52,2300,50,2025,,0.17
+38,1,23,300,42,2025,,9.5
