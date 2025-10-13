@@ -77,3 +77,4 @@ id,customer_id,product_id,quantity,week_number,year,notes,sales_price
 76,1,45,500,46,2025,,0.52
 77,1,45,500,50,2025,,0.52
 78,1,49,4600,42,2025,,0.19
+79,1,50,4600,42,2025,,0.19
