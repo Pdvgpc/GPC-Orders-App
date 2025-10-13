@@ -494,8 +494,10 @@ if page == "Dashboard":
             years,
             index=years.index(datetime.now().year) if datetime.now().year in years else 0
         )
-        per_prod = (df[df["year"] == sel_year]
-                    .groupby("Product", dropna=False)["quantity"].sum()
-                    .reset_index(name="Total Sold")
-                    .sort_values("Total Sold", ascending=False))
-        st.markdown(f"
+per_prod = (df[df["year"] == sel_year]
+            .groupby("Product", dropna=False)["quantity"].sum()
+            .reset_index(name="Total Sold")
+            .sort_values("Total Sold", ascending=False))
+st.markdown(f"### Orders per Product in {sel_year}")
+st.dataframe(per_prod, use_container_width=True)
+
