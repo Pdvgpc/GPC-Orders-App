@@ -271,13 +271,14 @@ def fmt_select_from_df(id_value, df_id_name: pd.DataFrame) -> str:
 
 
 # ------------------------------------------------------------
-# [Start] UI helper: Enter = volgende veld / submit
+# [Start] UI helper: Enter = volgende veld / submit (met selectbox-veiligheid)
 # ------------------------------------------------------------
 def enable_enter_navigation(submit_button_label: str):
     components.html(f"""
     <script>
     (function() {{
       const root = window.parent.document;
+
       function isEditable(el) {{
         if (!el) return false;
         const tag = el.tagName;
@@ -285,29 +286,61 @@ def enable_enter_navigation(submit_button_label: str):
         if (el.getAttribute && el.getAttribute('contenteditable') === 'true') return true;
         return false;
       }}
+
+      function isComboBox(el) {{
+        if (!el) return false;
+        if (el.getAttribute && el.getAttribute('role') === 'combobox') return true;
+        let p = el;
+        for (let i=0; i<3 && p; i++) {{
+          if (p.getAttribute && p.getAttribute('role') === 'combobox') return true;
+          p = p.parentElement;
+        }}
+        return false;
+      }}
+
       function getFocusableInputs() {{
         const all = Array.from(root.querySelectorAll('input, textarea'));
         return all.filter(el => !el.disabled && el.offsetParent !== null);
       }}
+
       function findSubmitButton(label) {{
         const btns = Array.from(root.querySelectorAll('button'));
         return btns.find(b => (b.innerText || '').trim() === label.trim());
       }}
+
       function focusNext(current) {{
         const inputs = getFocusableInputs();
         const idx = inputs.indexOf(current);
         if (idx === -1) return false;
         const next = inputs[idx + 1];
-        if (next) {{ next.focus(); if (next.setSelectionRange && next.value != null) {{
-          const len = next.value.length; try {{ next.setSelectionRange(len, len); }} catch(e) {{}} }} return true; }}
-        const btn = findSubmitButton("{submit_button_label}"); if (btn) btn.click(); return true;
+        if (next) {{
+          next.focus();
+          if (next.setSelectionRange && next.value != null) {{
+            const len = next.value.length;
+            try {{ next.setSelectionRange(len, len); }} catch(e) {{}}
+          }}
+          return true;
+        }}
+        const btn = findSubmitButton("{submit_button_label}");
+        if (btn) btn.click();
+        return true;
       }}
+
       function handler(e) {{
         if (e.key !== 'Enter') return;
         const active = root.activeElement;
+
+        // Laat Streamlit combobox zelf Enter/↑/↓ verwerken
+        if (isComboBox(active)) return;
+
         if (active && active.tagName === 'TEXTAREA' && e.shiftKey) return;
-        if (isEditable(active)) {{ e.preventDefault(); focusNext(active); }}
+
+        if (isEditable(active)) {{
+          e.preventDefault();
+          focusNext(active);
+        }}
       }}
+
       root.addEventListener('keydown', handler, true);
     }})();
     </script>
@@ -517,22 +550,46 @@ elif page == "Orders":
     else:
         with st.form("add_order_form", clear_on_submit=True):
             cA, cB = st.columns(2)
+
+            # Laatste gekozen customer onthouden
+            last_cid = st.session_state.get("last_customer_id")
+
             with cA:
                 cust_ids = st.session_state.customers["id"].dropna().astype(int).tolist()
-                prod_ids = st.session_state.products["id"].dropna().astype(int).tolist()
+                cust_options = [None] + cust_ids
+                cust_index = 0
+                if last_cid in cust_options:
+                    cust_index = cust_options.index(last_cid)
 
                 sel_customer = st.selectbox(
                     "Customer *",
-                    options=[None] + cust_ids,
+                    options=cust_options,
                     format_func=lambda i: "" if i is None else fmt_select_from_df(i, st.session_state.customers),
-                    index=0,
+                    index=cust_index,
                 )
+
+                # Products met "Product — Supplier" in dropdown + type-ahead/enter
+                prods = st.session_state.products.copy()
+                prods = coerce_columns(prods, {"id":"int","name":"str","supplier":"str"})
+                prod_ids = prods["id"].dropna().astype(int).tolist()
+
+                def _fmt_product(i):
+                    if i is None:
+                        return ""
+                    row = prods.loc[prods["id"] == int(i)]
+                    if row.empty:
+                        return ""
+                    r = row.iloc[0]
+                    return f"{r['name']} — {r['supplier']}".strip()
+
                 sel_product = st.selectbox(
                     "Article (Product) *",
                     options=[None] + prod_ids,
-                    format_func=lambda i: "" if i is None else fmt_select_from_df(i, st.session_state.products),
+                    format_func=_fmt_product,
                     index=0,
+                    help="Typ om te filteren. Gebruik ↑/↓ en Enter om te kiezen."
                 )
+
                 amount = st.number_input("Amount *", min_value=1, step=1, value=1)
 
             with cB:
@@ -588,6 +645,9 @@ elif page == "Orders":
                     st.session_state.orders = pd.concat(
                         [st.session_state.orders, pd.DataFrame(rows)], ignore_index=True
                     )
+                    # Onthoud laatst gekozen customer
+                    st.session_state["last_customer_id"] = int(sel_customer)
+
                     save_data()
                     st.success(f"Toegevoegd: {len(rows)} order(s) voor weken: {', '.join(map(str, weeks))}")
                     st.rerun()
@@ -616,27 +676,60 @@ elif page == "Orders":
     if flt_article:  filtered_df = filtered_df[filtered_df["Article"].isin(flt_article)]
     if flt_weeks:    filtered_df = filtered_df[filtered_df["Weeknumber"].isin(flt_weeks)]
 
-    # ----- Tabel bewerken -----
-    if filtered_df.empty:
-        st.info("Geen orders gevonden (controleer je filters).")
-    else:
+    # ----- Sortering -----
+    if not filtered_df.empty:
+        st.subheader("↕️ Sortering")
         show_cols = ["Customer","Article","Description","Amount","Price","Sales Price","Supplier",
                      "Weeknumber","Date of Weeknumber","Year"]
-        display_df = filtered_df[show_cols + ["_OID"]].copy()
+        s1, s2, s3 = st.columns([3,3,2])
+        with s1:
+            o_sort1 = st.selectbox("Sorteer op", options=show_cols, index=0, key="o_sort1")
+        with s2:
+            o_sort2 = st.selectbox("Daarna op (optioneel)", options=["(geen)"] + show_cols, index=0, key="o_sort2")
+        with s3:
+            o_asc = st.checkbox("Oplopend", value=True, key="o_asc")
 
-        editor_df = display_df.copy()
+        _sort_df = filtered_df.copy()
+        _sort_df["_SalesNum"] = pd.to_numeric(
+            _sort_df["Sales Price"].astype(str).str.replace(",", ".", regex=False),
+            errors="coerce"
+        )
+        _sort_df["_PriceNum"] = pd.to_numeric(_sort_df["Price"], errors="coerce")
+
+        def _resolve_sort_col(colname: str) -> str:
+            if colname == "Sales Price": return "_SalesNum"
+            if colname == "Price": return "_PriceNum"
+            return colname
+
+        sort_by = [_resolve_sort_col(o_sort1)]
+        if o_sort2 != "(geen)":
+            sort_by.append(_resolve_sort_col(o_sort2))
+            ascending = [o_asc, o_asc]
+        else:
+            ascending = [o_asc]
+
+        display_df = _sort_df.sort_values(by=sort_by, ascending=ascending, kind="mergesort")
+    else:
+        display_df = filtered_df
+
+    # ----- Tabel bewerken -----
+    if display_df.empty:
+        st.info("Geen orders gevonden (controleer je filters).")
+    else:
+        editor_df = display_df[show_cols + ["_OID"]].copy()
         editor_df.insert(0, "Select", False)
         editor_df.set_index("_OID", inplace=True)
         for c in ["Customer","Article","Description","Supplier"]:
             editor_df[c] = editor_df[c].astype("string")
         editor_df["Date of Weeknumber"] = editor_df["Date of Weeknumber"].astype(str)
-
-        # Sales Price als string (0,75)
         editor_df["Sales Price"] = (
             editor_df["Sales Price"]
             .apply(lambda v: "" if pd.isna(v) else f"{float(v):.2f}".replace(".", ","))
             .astype("string")
         )
+        for _drop in ["_SalesNum","_PriceNum"]:
+            if _drop in editor_df.columns:
+                editor_df = editor_df.drop(columns=[_drop])
 
         st.subheader("📋 Orders (bewerken, selecteren en verwijderen)")
         edited = st.data_editor(
@@ -696,9 +789,9 @@ elif page == "Orders":
         # ----- Export -----
         st.markdown("### ⬇️ Export Excel (pivot per week)")
         cust_rows = ["Customer","Article","Description","Sales Price","Supplier"]
-        cust_pivot = make_pivot_amount(filtered_df[cust_rows + ["Weeknumber","Amount"]], cust_rows)
+        cust_pivot = make_pivot_amount(display_df[cust_rows + ["Weeknumber","Amount"]], cust_rows)
         sup_rows  = ["Supplier","Article","Description","Customer"]
-        sup_pivot = make_pivot_amount(filtered_df[sup_rows + ["Weeknumber","Amount"]], sup_rows)
+        sup_pivot = make_pivot_amount(display_df[sup_rows + ["Weeknumber","Amount"]], sup_rows)
         cust_disabled = cust_pivot.empty; sup_disabled = sup_pivot.empty
         cust_file = _excel_export_bytes(cust_pivot, f"GPC Orders {datetime.now().year}") if not cust_disabled else None
         sup_file  = _excel_export_bytes(sup_pivot,  f"GPC Orders {datetime.now().year}") if not sup_disabled else None
@@ -910,9 +1003,39 @@ elif page == "Products":
               .astype("string")
         )
 
+        # ---- Sortering voor products
+        st.subheader("↕️ Sortering")
+        p_sort_options = ["Name","Supplier","4w Availability","ID","Price","Description"]
+        ps1, ps2, ps3 = st.columns([3,3,2])
+        with ps1:
+            p_sort1 = st.selectbox("Sorteer op", options=p_sort_options, index=0, key="p_sort1")
+        with ps2:
+            p_sort2 = st.selectbox("Daarna op (optioneel)", options=["(geen)"] + p_sort_options, index=0, key="p_sort2")
+        with ps3:
+            p_asc = st.checkbox("Oplopend", value=True, key="p_asc")
+
+        _pview = prod_view.copy()
+        _pview["_PriceNum"] = pd.to_numeric(
+            _pview["Price"].astype(str).str.replace(",", ".", regex=False),
+            errors="coerce"
+        )
+
+        def _p_resolve(colname: str) -> str:
+            if colname == "Price": return "_PriceNum"
+            return colname
+
+        p_sort_by = [_p_resolve(p_sort1)]
+        if p_sort2 != "(geen)":
+            p_sort_by.append(_p_resolve(p_sort2))
+            p_ascending = [p_asc, p_asc]
+        else:
+            p_ascending = [p_asc]
+
+        _pview = _pview.sort_values(by=p_sort_by, ascending=p_ascending, kind="mergesort")
+
         st.subheader("✏️ Bewerken & Verwijderen")
         edited = st.data_editor(
-            prod_view,
+            _pview.drop(columns=["_PriceNum"]),
             use_container_width=True,
             hide_index=True,
             num_rows="dynamic",
@@ -970,6 +1093,3 @@ elif page == "Products":
 # ------------------------------------------------------------
 # [End] Products
 # ------------------------------------------------------------
-
-
-
