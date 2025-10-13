@@ -467,7 +467,7 @@ if st.sidebar.button("Logout"):
 
 if st.sidebar.button("💾 Save now"):
     save_data()
-    st.sidebar.success("Data opgeslagen in GitHub.")
+    st.sidebar.success("Saved.")
 # ------------------------------------------------------------
 # [End] Init state + Sidebar
 # ------------------------------------------------------------
@@ -970,5 +970,6 @@ elif page == "Products":
 # ------------------------------------------------------------
 # [End] Products
 # ------------------------------------------------------------
+
 
 
