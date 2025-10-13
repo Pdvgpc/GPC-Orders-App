@@ -786,111 +786,6 @@ elif page == "Customers":
 elif page == "Products":
     st.title("🪴 Products")
 
-    # --- 🛠️ Reparatie & Import checker voor products.csv in GitHub ---
-with st.expander("🛠️ Reparatie / import-check voor products.csv"):
-    repo_dir = SEC.get("DATA_DIR", "data")
-
-    def _read_products_raw():
-        # lees ruwe tekst; kan ; of , zijn
-        txt = _gh_get_text(f"{repo_dir}/products.csv")
-        if txt is None:
-            st.error(f"{repo_dir}/products.csv niet gevonden in de repo.")
-            return None
-        return txt
-
-    def _parse_products_flex(txt: str) -> pd.DataFrame:
-        # Probeer delimiter automatisch te snuffelen
-        from io import StringIO
-        try:
-            df = pd.read_csv(StringIO(txt), sep=None, engine="python")  # autodetect , ; \t
-        except Exception:
-            # fallback: probeer ; dan ,
-            try:
-                df = pd.read_csv(StringIO(txt), sep=";")
-            except Exception:
-                df = pd.read_csv(StringIO(txt), sep=",")
-        return df
-
-    def _normalize_products_columns(df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
-        # header normaliseren
-        norm_map = {
-            "name": "name", "naam": "name", "productnaam": "name",
-            "description": "description", "beschrijving": "description", "omschrijving": "description",
-            "price": "price", "prijs": "price", "selling_price": "price",
-            "four_week_availability": "four_week_availability",
-            "4_week_availability": "four_week_availability",
-            "4w_availability": "four_week_availability",
-            "4w availability": "four_week_availability",
-            "leverancier": "supplier", "supplier": "supplier"
-        }
-        new_cols = {}
-        for c in df.columns:
-            key = str(c).strip().lower()
-            new_cols[c] = norm_map.get(key, key)  # onbekende laten we even staan met lower
-        df = df.rename(columns=new_cols)
-
-        # Alleen relevante kolommen houden / aanmaken als ze ontbreken
-        for needed in ["name","description","price","four_week_availability","supplier"]:
-            if needed not in df.columns:
-                df[needed] = pd.NA
-
-        df = df[["name","description","price","four_week_availability","supplier"]].copy()
-
-        # Trim strings
-        for c in ["name","description","supplier"]:
-            df[c] = df[c].astype(str).str.strip()
-
-        # Prijs: komma→punt, 2 dec
-        df["price"] = df["price"].astype(str).str.replace(",", ".", regex=False)
-        df["price"] = pd.to_numeric(df["price"], errors="coerce").round(2)
-
-        # four_week_availability → int
-        df["four_week_availability"] = pd.to_numeric(df["four_week_availability"], errors="coerce").fillna(0).astype(int)
-
-        # lege/ongeldige rijen eruit (name + supplier + price vereist)
-        valid = (df["name"].str.len() > 0) & (df["supplier"].str.len() > 0) & pd.notna(df["price"])
-        df = df.loc[valid].reset_index(drop=True)
-
-        return df
-
-    if st.button("🔎 Controleer en toon preview"):
-        raw = _read_products_raw()
-        if raw is not None:
-            df_guess = _parse_products_flex(raw)
-            st.caption("Kolommen gedetecteerd in CSV:")
-            st.write(list(df_guess.columns))
-            df_norm = _normalize_products_columns(df_guess)
-            st.markdown("**Preview (na normalisatie):**")
-            st.dataframe(df_norm.head(20), use_container_width=True)
-            st.session_state["_import_preview_products"] = df_norm
-
-    if "_import_preview_products" in st.session_state:
-        df_ready = st.session_state["_import_preview_products"]
-        st.info(f"Rijen klaar om te importeren: {len(df_ready)}")
-        mode = st.radio("Importmodus", ["Toevoegen aan huidige lijst", "Huidige lijst vervangen"], horizontal=True)
-        if st.button("✅ Reparatie uitvoeren en opslaan in GitHub"):
-            if mode == "Huidige lijst vervangen":
-                # Nieuwe ID's vanaf 1
-                base_id = 1
-                df_ready = df_ready.copy()
-                df_ready.insert(0, "id", range(base_id, base_id + len(df_ready)))
-                st.session_state.products = df_ready[["id","name","description","price","four_week_availability","supplier"]]
-            else:
-                # Toevoegen na laatste ID
-                base_id = next_id(st.session_state.products)
-                df_ready = df_ready.copy()
-                df_ready.insert(0, "id", range(base_id, base_id + len(df_ready)))
-                st.session_state.products = pd.concat(
-                    [st.session_state.products,
-                     df_ready[["id","name","description","price","four_week_availability","supplier"]]],
-                    ignore_index=True
-                )
-            save_data()
-            st.success("Import gerepareerd en opgeslagen in GitHub ✅")
-            st.rerun()
-
-
     st.subheader("➕ Nieuw product")
     with st.form("add_product_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
@@ -1002,7 +897,119 @@ with st.expander("🛠️ Reparatie / import-check voor products.csv"):
                 else:
                     st.session_state.products = st.session_state.products[~st.session_state.products["id"].isin(del_ids)]
                     save_data(); st.success(f"Verwijderd: {del_ids}"); st.rerun()
+
+                    # --- Onder aan de Products-pagina: losse reparatie/import-sectie ---
+st.markdown("---")
+with st.container():
+    st.subheader("🛠️ Reparatie / import-check voor products.csv (GitHub)")
+
+    repo_dir = SEC.get("DATA_DIR", "data")
+
+    def _read_products_raw():
+        txt = _gh_get_text(f"{repo_dir}/products.csv")
+        if txt is None:
+            st.error(f"{repo_dir}/products.csv niet gevonden in de repo.")
+            return None
+        return txt
+
+    def _parse_products_flex(txt: str) -> pd.DataFrame:
+        from io import StringIO
+        try:
+            # autodetect delimiter (, ; \t) met engine="python"
+            df = pd.read_csv(StringIO(txt), sep=None, engine="python")
+        except Exception:
+            # fallback: eerst ; dan ,
+            try:
+                df = pd.read_csv(StringIO(txt), sep=";")
+            except Exception:
+                df = pd.read_csv(StringIO(txt), sep=",")
+        return df
+
+    def _normalize_products_columns(df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        # Header normaliseren (NL/ENG varianten)
+        norm_map = {
+            "name": "name", "naam": "name", "productnaam": "name",
+            "description": "description", "beschrijving": "description", "omschrijving": "description",
+            "price": "price", "prijs": "price", "selling_price": "price",
+            "four_week_availability": "four_week_availability",
+            "4_week_availability": "four_week_availability",
+            "4w_availability": "four_week_availability",
+            "4w availability": "four_week_availability",
+            "leverancier": "supplier", "supplier": "supplier"
+        }
+        new_cols = {}
+        for c in df.columns:
+            key = str(c).strip().lower()
+            new_cols[c] = norm_map.get(key, key)
+        df = df.rename(columns=new_cols)
+
+        # Vereiste kolommen afdwingen
+        for needed in ["name","description","price","four_week_availability","supplier"]:
+            if needed not in df.columns:
+                df[needed] = pd.NA
+
+        df = df[["name","description","price","four_week_availability","supplier"]].copy()
+
+        # Trim strings
+        for c in ["name","description","supplier"]:
+            df[c] = df[c].astype(str).str.strip()
+
+        # Prijs: komma→punt, 2 dec
+        df["price"] = df["price"].astype(str).str.replace(",", ".", regex=False)
+        df["price"] = pd.to_numeric(df["price"], errors="coerce").round(2)
+
+        # four_week_availability → int
+        df["four_week_availability"] = pd.to_numeric(
+            df["four_week_availability"], errors="coerce"
+        ).fillna(0).astype(int)
+
+        # Filter lege/ongeldige rijen (vereist name + supplier + price)
+        valid = (df["name"].str.len() > 0) & (df["supplier"].str.len() > 0) & pd.notna(df["price"])
+        df = df.loc[valid].reset_index(drop=True)
+
+        return df
+
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        if st.button("🔎 Controleer en toon preview", use_container_width=True):
+            raw = _read_products_raw()
+            if raw is not None:
+                df_guess = _parse_products_flex(raw)
+                st.session_state["_import_preview_products_cols"] = list(df_guess.columns)
+                st.session_state["_import_preview_products"] = _normalize_products_columns(df_guess)
+
+    if "_import_preview_products_cols" in st.session_state:
+        st.caption("Gedetecteerde kolommen in products.csv:")
+        st.code(", ".join(map(str, st.session_state["_import_preview_products_cols"])))
+
+    if "_import_preview_products" in st.session_state:
+        df_ready = st.session_state["_import_preview_products"]
+        st.markdown("**Preview (na normalisatie):**")
+        st.dataframe(df_ready.head(20), use_container_width=True)
+        st.info(f"Rijen klaar om te importeren: {len(df_ready)}")
+
+        mode = st.radio("Importmodus", ["Toevoegen aan huidige lijst", "Huidige lijst vervangen"], horizontal=True)
+        if st.button("✅ Reparatie uitvoeren en opslaan in GitHub", type="primary"):
+            if mode == "Huidige lijst vervangen":
+                base_id = 1
+                df_ready = df_ready.copy()
+                df_ready.insert(0, "id", range(base_id, base_id + len(df_ready)))
+                st.session_state.products = df_ready[["id","name","description","price","four_week_availability","supplier"]]
+            else:
+                base_id = next_id(st.session_state.products)
+                df_ready = df_ready.copy()
+                df_ready.insert(0, "id", range(base_id, base_id + len(df_ready)))
+                st.session_state.products = pd.concat(
+                    [st.session_state.products,
+                     df_ready[["id","name","description","price","four_week_availability","supplier"]]],
+                    ignore_index=True
+                )
+            save_data()
+            st.success("Import gerepareerd en opgeslagen in GitHub ✅")
+            st.rerun()
 # ------------------------------------------------------------
 # [End] Products
 # ------------------------------------------------------------
+
 
