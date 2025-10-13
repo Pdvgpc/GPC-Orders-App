@@ -676,47 +676,14 @@ elif page == "Orders":
     if flt_article:  filtered_df = filtered_df[filtered_df["Article"].isin(flt_article)]
     if flt_weeks:    filtered_df = filtered_df[filtered_df["Weeknumber"].isin(flt_weeks)]
 
-    # ----- Sortering -----
-    if not filtered_df.empty:
-        st.subheader("↕️ Sortering")
-        show_cols = ["Customer","Article","Description","Amount","Price","Sales Price","Supplier",
-                     "Weeknumber","Date of Weeknumber","Year"]
-        s1, s2, s3 = st.columns([3,3,2])
-        with s1:
-            o_sort1 = st.selectbox("Sorteer op", options=show_cols, index=0, key="o_sort1")
-        with s2:
-            o_sort2 = st.selectbox("Daarna op (optioneel)", options=["(geen)"] + show_cols, index=0, key="o_sort2")
-        with s3:
-            o_asc = st.checkbox("Oplopend", value=True, key="o_asc")
-
-        _sort_df = filtered_df.copy()
-        _sort_df["_SalesNum"] = pd.to_numeric(
-            _sort_df["Sales Price"].astype(str).str.replace(",", ".", regex=False),
-            errors="coerce"
-        )
-        _sort_df["_PriceNum"] = pd.to_numeric(_sort_df["Price"], errors="coerce")
-
-        def _resolve_sort_col(colname: str) -> str:
-            if colname == "Sales Price": return "_SalesNum"
-            if colname == "Price": return "_PriceNum"
-            return colname
-
-        sort_by = [_resolve_sort_col(o_sort1)]
-        if o_sort2 != "(geen)":
-            sort_by.append(_resolve_sort_col(o_sort2))
-            ascending = [o_asc, o_asc]
-        else:
-            ascending = [o_asc]
-
-        display_df = _sort_df.sort_values(by=sort_by, ascending=ascending, kind="mergesort")
-    else:
-        display_df = filtered_df
-
-    # ----- Tabel bewerken -----
-    if display_df.empty:
+    # ----- Tabel bewerken (klik op kolomtitel om te sorteren) -----
+    if filtered_df.empty:
         st.info("Geen orders gevonden (controleer je filters).")
     else:
-        editor_df = display_df[show_cols + ["_OID"]].copy()
+        show_cols = ["Customer","Article","Description","Amount","Price","Sales Price","Supplier",
+                     "Weeknumber","Date of Weeknumber","Year"]
+        editor_df = filtered_df[show_cols + ["_OID"]].copy()
+
         editor_df.insert(0, "Select", False)
         editor_df.set_index("_OID", inplace=True)
         for c in ["Customer","Article","Description","Supplier"]:
@@ -727,10 +694,8 @@ elif page == "Orders":
             .apply(lambda v: "" if pd.isna(v) else f"{float(v):.2f}".replace(".", ","))
             .astype("string")
         )
-        for _drop in ["_SalesNum","_PriceNum"]:
-            if _drop in editor_df.columns:
-                editor_df = editor_df.drop(columns=[_drop])
 
+        st.caption("Tip: klik op een **kolomtitel** om te sorteren (nog eens klikken = omdraaien).")
         st.subheader("📋 Orders (bewerken, selecteren en verwijderen)")
         edited = st.data_editor(
             editor_df,
@@ -789,9 +754,9 @@ elif page == "Orders":
         # ----- Export -----
         st.markdown("### ⬇️ Export Excel (pivot per week)")
         cust_rows = ["Customer","Article","Description","Sales Price","Supplier"]
-        cust_pivot = make_pivot_amount(display_df[cust_rows + ["Weeknumber","Amount"]], cust_rows)
+        cust_pivot = make_pivot_amount(filtered_df[cust_rows + ["Weeknumber","Amount"]], cust_rows)
         sup_rows  = ["Supplier","Article","Description","Customer"]
-        sup_pivot = make_pivot_amount(display_df[sup_rows + ["Weeknumber","Amount"]], sup_rows)
+        sup_pivot = make_pivot_amount(filtered_df[sup_rows + ["Weeknumber","Amount"]], sup_rows)
         cust_disabled = cust_pivot.empty; sup_disabled = sup_pivot.empty
         cust_file = _excel_export_bytes(cust_pivot, f"GPC Orders {datetime.now().year}") if not cust_disabled else None
         sup_file  = _excel_export_bytes(sup_pivot,  f"GPC Orders {datetime.now().year}") if not sup_disabled else None
@@ -1003,7 +968,7 @@ elif page == "Products":
               .astype("string")
         )
 
-        # ---- Sortering voor products
+        # ---- Sortering voor products (via selecties)
         st.subheader("↕️ Sortering")
         p_sort_options = ["Name","Supplier","4w Availability","ID","Price","Description"]
         ps1, ps2, ps3 = st.columns([3,3,2])
