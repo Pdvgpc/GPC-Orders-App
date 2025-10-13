@@ -57,29 +57,40 @@ def load_auth():
 def login_panel():
     cfg = load_auth()
     users = cfg.get("credentials", {}).get("usernames", {})
-    cookie = cfg.get("cookie", {"name":"gpc_auth","expiry_days":14})
+    cookie = cfg.get("cookie", {"name": "gpc_auth", "expiry_days": 14})
     st.session_state.setdefault("auth_user", None)
 
+    # Al ingelogd? Teruggeven.
     if st.session_state["auth_user"]:
         return st.session_state["auth_user"]
 
     st.markdown("### 🔐 Login")
     u = st.text_input("Gebruikersnaam")
     p = st.text_input("Wachtwoord", type="password")
+
     if st.button("Inloggen", type="primary"):
-        if u in users:
-            rec = users[u]
-            # Eenvoudige start: plain-text wachtwoorden uit auth.yaml
+        rec = users.get(u)
+        if rec:
             ok = False
-            if "password_plain" in rec:
+
+            # 1) Veilig: SHA-256-hash controleren als aanwezig
+            if isinstance(rec.get("password_sha256"), str) and rec["password_sha256"]:
+                try:
+                    entered = hashlib.sha256(str(p).encode("utf-8")).hexdigest()
+                    ok = hmac.compare_digest(entered, rec["password_sha256"])
+                except Exception:
+                    ok = False
+
+            # 2) Fallback: plain-text (voor oudere entries)
+            elif "password_plain" in rec:
                 ok = (str(p) == str(rec["password_plain"]))
-            # (Later kun je hier bcrypt/sha256 toevoegen als je wilt)
+
             if ok:
                 display_name = rec.get("name", u)
                 st.session_state["auth_user"] = {
                     "username": u,
                     "name": display_name,
-                    "email": rec.get("email","")
+                    "email": rec.get("email", "")
                 }
                 st.success(f"Ingelogd als {display_name}")
                 st.experimental_rerun()
@@ -87,6 +98,7 @@ def login_panel():
                 st.error("Ongeldige gebruikersnaam/wachtwoord")
         else:
             st.error("Ongeldige gebruikersnaam/wachtwoord")
+
     st.stop()
 
 user = login_panel()
@@ -1015,4 +1027,5 @@ elif page == "Audit":
 # ------------------------------------------------------------
 # [End] Pages
 # ------------------------------------------------------------
+
 
