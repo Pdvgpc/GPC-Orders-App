@@ -11,3 +11,4 @@ id,customer_id,product_id,quantity,week_number,year,notes,sales_price
 10,1,3,500,42,2025,,0.65
 11,1,3,1000,46,2025,,0.65
 12,1,3,3000,50,2025,,0.65
+13,1,4,2000,42,2025,,1.25
