@@ -42,3 +42,4 @@ id,customer_id,product_id,quantity,week_number,year,notes,sales_price
 41,1,26,800,42,2025,,9.5
 42,1,26,800,46,2025,,9.5
 43,1,26,800,50,2025,,9.5
+44,1,27,200,46,2025,,3.95
