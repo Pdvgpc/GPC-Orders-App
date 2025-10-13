@@ -1,18 +1,23 @@
-# ===== GPC Orders (cloud) =====
+# ===== GPC Orders (cloud, GitHub storage) =====
 import os
-from io import BytesIO
+from io import BytesIO, StringIO
 from datetime import datetime
-import hashlib, hmac
+import base64, json, requests
+from typing import Optional
 
 import pandas as pd
 import streamlit as st
 import yaml
 
+import hashlib, hmac
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
 import streamlit.components.v1 as components
+
+# ---- Secrets (vereist voor GitHub storage) ----
+from streamlit.runtime.secrets import secrets
 
 # ------------------------------------------------------------
 # [Start] App Config
@@ -20,16 +25,74 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="GPC Orders System", layout="wide")
 
 HERE = os.path.dirname(__file__)
-DATA_DIR = os.path.join(HERE, "GPCOF_data")
-os.makedirs(DATA_DIR, exist_ok=True)
-
-PRODUCTS_CSV  = os.path.join(DATA_DIR, "products.csv")
-CUSTOMERS_CSV = os.path.join(DATA_DIR, "customers.csv")
-ORDERS_CSV    = os.path.join(DATA_DIR, "orders.csv")
-
-AUTH_YAML = os.path.join(HERE, "auth.yaml")
+AUTH_YAML = os.path.join(HERE, "auth.yaml")  # auth.yaml blijft in de repo
 # ------------------------------------------------------------
 # [End] App Config
+# ------------------------------------------------------------
+
+
+# ------------------------------------------------------------
+# [Start] GitHub storage helpers (CSV’s in repo/branch main)
+# ------------------------------------------------------------
+def _gh_headers():
+    return {
+        "Authorization": f"Bearer {secrets['GITHUB_TOKEN']}",
+        "Accept": "application/vnd.github+json",
+    }
+
+def _gh_api(path: str) -> str:
+    owner = secrets["GITHUB_OWNER"]
+    repo  = secrets["GITHUB_REPO"]
+    return f"https://api.github.com/repos/{owner}/{repo}{path}"
+
+def _gh_get_text(path_in_repo: str) -> Optional[str]:
+    """Leest een bestand (text) uit de repo. Retourneert None als het niet bestaat."""
+    url = _gh_api(f"/contents/{path_in_repo}")
+    r = requests.get(url, headers=_gh_headers())
+    if r.status_code == 200:
+        data = r.json()
+        return base64.b64decode(data["content"]).decode("utf-8", errors="ignore")
+    if r.status_code == 404:
+        return None
+    st.error(f"GitHub read error {r.status_code}: {r.text[:200]}")
+    return ""
+
+def _gh_put_text(path_in_repo: str, content_text: str, msg: str):
+    """Schrijft/maakt text-bestand naar de repo (branch main)."""
+    url = _gh_api(f"/contents/{path_in_repo}")
+    r = requests.get(url, headers=_gh_headers())
+    sha = r.json().get("sha") if r.status_code == 200 else None
+
+    payload = {
+        "message": msg,
+        "content": base64.b64encode(content_text.encode("utf-8")).decode("ascii"),
+        "branch": "main",
+    }
+    if sha:
+        payload["sha"] = sha
+
+    r2 = requests.put(url, headers=_gh_headers(), data=json.dumps(payload))
+    if r2.status_code not in (200, 201):
+        st.error(f"GitHub write error {r2.status_code}: {r2.text[:200]}")
+
+def _gh_get_csv(path_in_repo: str) -> Optional[pd.DataFrame]:
+    """Leest CSV in als DataFrame. None wanneer het bestand niet bestaat."""
+    txt = _gh_get_text(path_in_repo)
+    if txt is None:
+        return None
+    if not txt.strip():
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(StringIO(txt))
+    except Exception:
+        return pd.DataFrame()
+
+def _gh_put_csv(path_in_repo: str, df: pd.DataFrame, msg: str):
+    """Schrijft DataFrame als CSV naar repo."""
+    csv_txt = df.to_csv(index=False)
+    _gh_put_text(path_in_repo, csv_txt, msg)
+# ------------------------------------------------------------
+# [End] GitHub storage helpers
 # ------------------------------------------------------------
 
 
@@ -41,14 +104,15 @@ def load_auth() -> dict:
         with open(AUTH_YAML, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     except Exception:
+        # Auth als YAML niet te lezen is, toon melding
+        st.error("auth.yaml niet gevonden of ongeldig. Voeg auth.yaml toe aan de repo.")
         return {}
 
 def login_panel():
     cfg = load_auth()
     users = cfg.get("credentials", {}).get("usernames", {})
-    cookie = cfg.get("cookie", {"name": "gpc_auth", "expiry_days": 14})
-
     st.session_state.setdefault("auth_user", None)
+
     if st.session_state["auth_user"]:
         return st.session_state["auth_user"]
 
@@ -122,58 +186,53 @@ def coerce_columns(df: pd.DataFrame, types: dict) -> pd.DataFrame:
     return df
 
 def load_data():
-    # Products
-    if os.path.exists(PRODUCTS_CSV):
-        prod = pd.read_csv(PRODUCTS_CSV)
-    else:
+    """Laadt CSV’s uit GitHub (map uit secrets: DATA_DIR)."""
+    repo_dir = secrets.get("DATA_DIR", "data")
+
+    # PRODUCTS
+    g = _gh_get_csv(f"{repo_dir}/products.csv")
+    if g is None:
         prod = pd.DataFrame(columns=["id","name","description","price","four_week_availability","supplier"])
+    else:
+        prod = g
     prod = coerce_columns(prod, {
-        "id": "Int64",
-        "name": "string",
-        "description": "string",
-        "price": "float",
-        "four_week_availability": "Int64",
-        "supplier": "string",
+        "id":"Int64","name":"string","description":"string","price":"float",
+        "four_week_availability":"Int64","supplier":"string",
     })
     st.session_state.products = prod
 
-    # Customers
-    if os.path.exists(CUSTOMERS_CSV):
-        cust = pd.read_csv(CUSTOMERS_CSV)
-    else:
+    # CUSTOMERS
+    g = _gh_get_csv(f"{repo_dir}/customers.csv")
+    if g is None:
         cust = pd.DataFrame(columns=["id","name","email"])
+    else:
+        cust = g
     cust = coerce_columns(cust, {"id":"Int64","name":"string","email":"string"})
     st.session_state.customers = cust
 
-    # Orders
-    if os.path.exists(ORDERS_CSV):
-        ords = pd.read_csv(ORDERS_CSV)
-    else:
+    # ORDERS
+    g = _gh_get_csv(f"{repo_dir}/orders.csv")
+    if g is None:
         ords = pd.DataFrame(columns=[
             "id","customer_id","product_id","quantity","week_number","year","notes","sales_price"
         ])
+    else:
+        ords = g
     ords = coerce_columns(ords, {
         "id":"Int64","customer_id":"Int64","product_id":"Int64","quantity":"Int64",
         "week_number":"Int64","year":"Int64","notes":"string","sales_price":"float",
     })
     st.session_state.orders = ords
 
-def _safe_save(df: pd.DataFrame, path: str):
-    tmp = path + ".tmp"
-    df.to_csv(tmp, index=False)
-    with open(tmp, "rb") as fsrc, open(path, "wb") as fdst:
-        fdst.write(fsrc.read())
-        fdst.flush()
-        os.fsync(fdst.fileno())
-    os.remove(tmp)
-
 def save_data():
+    """Schrijft CSV’s terug naar GitHub (branch main)."""
+    repo_dir = secrets.get("DATA_DIR", "data")
     if "products" in st.session_state:
-        _safe_save(st.session_state.products, PRODUCTS_CSV)
+        _gh_put_csv(f"{repo_dir}/products.csv", st.session_state.products, "update products.csv")
     if "customers" in st.session_state:
-        _safe_save(st.session_state.customers, CUSTOMERS_CSV)
+        _gh_put_csv(f"{repo_dir}/customers.csv", st.session_state.customers, "update customers.csv")
     if "orders" in st.session_state:
-        _safe_save(st.session_state.orders, ORDERS_CSV)
+        _gh_put_csv(f"{repo_dir}/orders.csv", st.session_state.orders, "update orders.csv")
 
 def ensure_state():
     if "products" not in st.session_state or "customers" not in st.session_state or "orders" not in st.session_state:
@@ -260,7 +319,7 @@ def enable_enter_navigation(submit_button_label: str):
 
 
 # ------------------------------------------------------------
-# [Start] Helpers: money input (komma of punt, 2 dec)
+# [Start] Helpers: money input (komma/punt, 2 dec)
 # ------------------------------------------------------------
 def money_input(label: str, value: float = 0.0, key: str = None, help: str = None):
     default_txt = f"{value:.2f}".replace(".", ",")
@@ -396,18 +455,20 @@ def make_pivot_amount(df: pd.DataFrame, row_fields: list) -> pd.DataFrame:
 # ------------------------------------------------------------
 ensure_state()
 
+user = login_panel()
+
 st.sidebar.title("🌿 GPC Orders System")
+st.sidebar.success(f"👤 Ingelogd als **{user['name']}**")
+
 page = st.sidebar.radio("Navigatie", ["Dashboard", "Orders", "Customers", "Products"])
 
-user = login_panel()
-st.sidebar.success(f"👤 Ingelogd als **{user['name']}**")
 if st.sidebar.button("Logout"):
     st.session_state["auth_user"] = None
     st.rerun()
 
 if st.sidebar.button("💾 Save now"):
     save_data()
-    st.sidebar.success("Data handmatig opgeslagen.")
+    st.sidebar.success("Data opgeslagen in GitHub.")
 # ------------------------------------------------------------
 # [End] Init state + Sidebar
 # ------------------------------------------------------------
@@ -437,411 +498,4 @@ if page == "Dashboard":
                     .groupby("Product", dropna=False)["quantity"].sum()
                     .reset_index(name="Total Sold")
                     .sort_values("Total Sold", ascending=False))
-        st.markdown(f"### Orders per Product in {sel_year}")
-        st.dataframe(per_prod, use_container_width=True)
-# ------------------------------------------------------------
-# [End] Dashboard
-# ------------------------------------------------------------
-
-
-# ------------------------------------------------------------
-# [Start] Orders
-# ------------------------------------------------------------
-elif page == "Orders":
-    st.title("📦 Orders")
-
-    # ----- Nieuwe order -----
-    st.subheader("➕ Nieuwe order")
-    if st.session_state.customers.empty or st.session_state.products.empty:
-        st.warning("Je hebt klanten én producten nodig om een order toe te voegen.")
-    else:
-        with st.form("add_order_form", clear_on_submit=True):
-            cA, cB = st.columns(2)
-            with cA:
-                cust_ids = st.session_state.customers["id"].dropna().astype(int).tolist()
-                prod_ids = st.session_state.products["id"].dropna().astype(int).tolist()
-
-                sel_customer = st.selectbox(
-                    "Customer *",
-                    options=[None] + cust_ids,
-                    format_func=lambda i: "" if i is None else fmt_select_from_df(i, st.session_state.customers),
-                    index=0,
-                )
-                sel_product = st.selectbox(
-                    "Article (Product) *",
-                    options=[None] + prod_ids,
-                    format_func=lambda i: "" if i is None else fmt_select_from_df(i, st.session_state.products),
-                    index=0,
-                )
-                amount = st.number_input("Amount *", min_value=1, step=1, value=1)
-
-            with cB:
-                sales_price, sp_ok = money_input(
-                    "Sales Price (optional)",
-                    value=0.00,
-                    key="oi_sales_price",
-                    help="Gebruik 12,34 of 12.34 (2 decimalen)."
-                )
-                weeks_txt = st.text_input("Weeknumbers * (comma separated, e.g. 4,8,12)", value="")
-                year = st.number_input("Year *", min_value=2020, max_value=2100, step=1, value=datetime.now().year)
-
-            enable_enter_navigation("Order(s) toevoegen")
-            submitted = st.form_submit_button("Order(s) toevoegen")
-
-            if submitted:
-                errors = []
-                if sel_customer is None: errors.append("Kies een Customer.")
-                if sel_product is None: errors.append("Kies een Product.")
-                if not sp_ok: errors.append("Sales Price is ongeldig. Gebruik 12,34 of 12.34.")
-
-                weeks, bad = [], []
-                if not weeks_txt.strip():
-                    errors.append("Vul ten minste één weeknummer in.")
-                else:
-                    for p in [w.strip() for w in weeks_txt.split(",") if w.strip()]:
-                        try:
-                            w = int(p)
-                            if 1 <= w <= 53: weeks.append(w)
-                            else: bad.append(p)
-                        except Exception:
-                            bad.append(p)
-                weeks = sorted(list(dict.fromkeys(weeks)))
-                if bad:
-                    errors.append(f"Ongeldige weeknummers: {', '.join(bad)} (toegestaan: 1..53)")
-
-                if errors:
-                    for e in errors: st.error(e)
-                else:
-                    base_id = next_id(st.session_state.orders)
-                    rows = []
-                    for idx, w in enumerate(weeks):
-                        rows.append({
-                            "id": base_id + idx,
-                            "customer_id": int(sel_customer),
-                            "product_id": int(sel_product),
-                            "quantity": int(amount),
-                            "sales_price": float(sales_price) if sales_price is not None else None,
-                            "week_number": int(w),
-                            "year": int(year),
-                        })
-                    st.session_state.orders = pd.concat(
-                        [st.session_state.orders, pd.DataFrame(rows)], ignore_index=True
-                    )
-                    save_data()
-                    st.success(f"Toegevoegd: {len(rows)} order(s) voor weken: {', '.join(map(str, weeks))}")
-                    st.rerun()
-
-    st.markdown("---")
-
-    # ----- Weergave + sorteerbare editor -----
-    base_df = build_orders_display_df()
-
-    with st.expander("🔎 Filters (tabel & export)"):
-        f1, f2, f3, f4 = st.columns(4)
-        with f1:
-            flt_customer = st.multiselect("Customer", options=sorted(base_df["Customer"].dropna().astype(str).unique().tolist()))
-        with f2:
-            flt_supplier = st.multiselect("Supplier", options=sorted(base_df["Supplier"].dropna().astype(str).unique().tolist()))
-        with f3:
-            flt_article = st.multiselect("Article", options=sorted(base_df["Article"].dropna().astype(str).unique().tolist()))
-        with f4:
-            unique_weeks = sorted(base_df["Weeknumber"].dropna().astype(int).unique().tolist())
-            flt_weeks = st.multiselect("Weeknumber", options=unique_weeks)
-
-    filtered_df = base_df.copy()
-    if flt_customer: filtered_df = filtered_df[filtered_df["Customer"].isin(flt_customer)]
-    if flt_supplier: filtered_df = filtered_df[filtered_df["Supplier"].isin(flt_supplier)]
-    if flt_article:  filtered_df = filtered_df[filtered_df["Article"].isin(flt_article)]
-    if flt_weeks:    filtered_df = filtered_df[filtered_df["Weeknumber"].isin(flt_weeks)]
-
-    if filtered_df.empty:
-        st.info("Geen orders gevonden (controleer je filters).")
-    else:
-        show_cols = ["Customer","Article","Description","Amount","Price","Sales Price","Supplier",
-                     "Weeknumber","Date of Weeknumber","Year"]
-        display_df = filtered_df[show_cols + ["_OID"]].copy()
-
-        editor_df = display_df.copy()
-        editor_df.insert(0, "Select", False)
-        editor_df.set_index("_OID", inplace=True)
-        for c in ["Customer","Article","Description","Supplier"]:
-            editor_df[c] = editor_df[c].astype("string")
-        editor_df["Date of Weeknumber"] = editor_df["Date of Weeknumber"].astype(str)
-        # Sales Price als tekst (0,75) zodat editor 2 dec accepteert
-        editor_df["Sales Price"] = (
-            editor_df["Sales Price"]
-            .apply(lambda v: "" if pd.isna(v) else f"{float(v):.2f}".replace(".", ","))
-            .astype("string")
-        )
-
-        st.subheader("📋 Orders (bewerken, selecteren en verwijderen)")
-        edited = st.data_editor(
-            editor_df,
-            use_container_width=True,
-            num_rows="dynamic",
-            column_config={
-                "Select": st.column_config.CheckboxColumn(help="Selecteer voor verwijderen"),
-                "Amount": st.column_config.NumberColumn(format="%d", min_value=0),
-                "Weeknumber": st.column_config.NumberColumn(format="%d", min_value=1, max_value=53),
-                "Year": st.column_config.NumberColumn(format="%d", min_value=2020, max_value=2100),
-                "Sales Price": st.column_config.TextColumn(help="Gebruik 12,34 of 12.34"),
-                "Price": st.column_config.NumberColumn(format="%.2f", min_value=0.0, step=0.01, disabled=True),
-                "Date of Weeknumber": st.column_config.TextColumn(disabled=True),
-                "Supplier": st.column_config.TextColumn(disabled=True),
-                "Customer": st.column_config.TextColumn(disabled=True),
-                "Article": st.column_config.TextColumn(disabled=True),
-                "Description": st.column_config.TextColumn(disabled=True),
-            },
-            hide_index=False,
-            key="orders_editor_v17",
-            column_order=None,  # <— sorteerbaar
-        )
-
-        selected_ids = edited.index[edited["Select"] == True].tolist()
-        c1, c2, _ = st.columns([1,1,6])
-
-        with c1:
-            if st.button("🗑️ Verwijder geselecteerde orders", use_container_width=True):
-                if not selected_ids:
-                    st.warning("Selecteer eerst één of meer orders.")
-                else:
-                    st.session_state.orders = st.session_state.orders[~st.session_state.orders["id"].isin(selected_ids)]
-                    save_data(); st.success(f"Verwijderd: {selected_ids}"); st.rerun()
-
-        with c2:
-            if st.button("💾 Opslaan wijzigingen", use_container_width=True):
-                base = st.session_state.orders.set_index("id")
-                for _oid, row in edited.iterrows():
-                    if _oid in base.index:
-                        if pd.notna(row.get("Amount")):
-                            base.at[_oid, "quantity"] = int(row["Amount"])
-                        if pd.notna(row.get("Weeknumber")):
-                            base.at[_oid, "week_number"] = int(row["Weeknumber"])
-                        if pd.notna(row.get("Year")):
-                            base.at[_oid, "year"] = int(row["Year"])
-                        sp = row.get("Sales Price")
-                        if pd.notna(sp) and sp != "":
-                            try:
-                                sp_norm = float(sp.replace(",", ".")) if isinstance(sp, str) else float(sp)
-                                base.at[_oid, "sales_price"] = round(sp_norm, 2)
-                            except Exception:
-                                pass
-                st.session_state.orders = base.reset_index()
-                save_data(); st.success("Wijzigingen opgeslagen."); st.rerun()
-
-        # ----- Export Excel (pivot per week) -----
-        st.markdown("### ⬇️ Export Excel (pivot per week)")
-        cust_rows = ["Customer","Article","Description","Sales Price","Supplier"]
-        cust_pivot = make_pivot_amount(filtered_df[cust_rows + ["Weeknumber","Amount"]], cust_rows)
-        sup_rows  = ["Supplier","Article","Description","Customer"]
-        sup_pivot = make_pivot_amount(filtered_df[sup_rows + ["Weeknumber","Amount"]], sup_rows)
-        cust_disabled = cust_pivot.empty; sup_disabled = sup_pivot.empty
-        cust_file = _excel_export_bytes(cust_pivot, f"GPC Orders {datetime.now().year}") if not cust_disabled else None
-        sup_file  = _excel_export_bytes(sup_pivot,  f"GPC Orders {datetime.now().year}") if not sup_disabled else None
-        e1, e2 = st.columns(2)
-        with e1:
-            st.download_button("⬇️ Export Excel Customer",
-                data=cust_file.getvalue() if cust_file else b"",
-                file_name=f"GPC_Orders_Customer_{datetime.now().year}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True, disabled=cust_disabled)
-        with e2:
-            st.download_button("⬇️ Export Excel Supplier",
-                data=sup_file.getvalue() if sup_file else b"",
-                file_name=f"GPC_Orders_Supplier_{datetime.now().year}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True, disabled=sup_disabled)
-# ------------------------------------------------------------
-# [End] Orders
-# ------------------------------------------------------------
-
-
-# ------------------------------------------------------------
-# [Start] Customers
-# ------------------------------------------------------------
-elif page == "Customers":
-    st.title("👥 Customers")
-
-    # Toevoegen
-    st.subheader("➕ Nieuwe klant")
-    with st.form("add_customer_form", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            name = st.text_input("Naam *")
-        with c2:
-            email = st.text_input("Email")
-        enable_enter_navigation("Klant toevoegen")
-        ok = st.form_submit_button("Klant toevoegen")
-
-    if ok and name.strip():
-        new_row = {"id": next_id(st.session_state.customers), "name": name.strip(), "email": email.strip()}
-        st.session_state.customers = pd.concat([st.session_state.customers, pd.DataFrame([new_row])], ignore_index=True)
-        save_data(); st.success(f"Klant '{name}' toegevoegd."); st.rerun()
-
-    st.markdown("---")
-
-    if st.session_state.customers.empty:
-        st.info("Nog geen klanten.")
-    else:
-        view = st.session_state.customers.copy().rename(columns={"id":"ID","name":"Name","email":"Email"})
-        view.insert(0, "Select", False)
-
-        st.subheader("✏️ Bewerken & Verwijderen")
-        edited = st.data_editor(
-            view,
-            use_container_width=True,
-            hide_index=True,
-            num_rows="dynamic",
-            column_config={
-                "Select": st.column_config.CheckboxColumn(),
-                "ID": st.column_config.NumberColumn(disabled=True),
-                "Name": st.column_config.TextColumn(),
-                "Email": st.column_config.TextColumn(),
-            },
-            key="customers_editor_v17",
-            column_order=None,  # sorteerbaar
-        )
-
-        if st.button("💾 Wijzigingen opslaan (Customers)"):
-            try:
-                to_save = edited.drop(columns=["Select"]).rename(columns={"ID":"id","Name":"name","Email":"email"})
-                to_save = coerce_columns(to_save, {"id":"int","name":"str","email":"str"})
-                st.session_state.customers = to_save
-                save_data()
-                st.success("Customer-wijzigingen opgeslagen.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Opslaan mislukt: {e}")
-
-        sel_ids = edited.loc[edited["Select"] == True, "ID"].tolist()
-        if st.button("🗑️ Verwijder geselecteerde klanten"):
-            if not sel_ids:
-                st.warning("Selecteer eerst één of meer klanten.")
-            else:
-                st.session_state.customers = st.session_state.customers[~st.session_state.customers["id"].isin(sel_ids)]
-                save_data()
-                st.success(f"Verwijderd: {sel_ids}")
-                st.rerun()
-# ------------------------------------------------------------
-# [End] Customers
-# ------------------------------------------------------------
-
-
-# ------------------------------------------------------------
-# [Start] Products
-# ------------------------------------------------------------
-elif page == "Products":
-    st.title("🪴 Products")
-
-    st.subheader("➕ Nieuw product")
-    with st.form("add_product_form", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            name = st.text_input("Product Name *")
-        with c2:
-            price, price_ok = money_input(
-                "Price (€)", value=0.00, key="pi_price", help="Gebruik 12,34 of 12.34 (2 decimalen)."
-            )
-            fourw = st.number_input("4 Week Availability", min_value=0, value=0, step=1)
-            supplier = st.text_input("Supplier *")
-            description = st.text_area("Description")
-        enable_enter_navigation("Product toevoegen")
-        ok = st.form_submit_button("Product toevoegen")
-
-    if ok:
-        errs = []
-        if not name.strip(): errs.append("Vul een productnaam in.")
-        if not supplier.strip(): errs.append("Vul een supplier in.")
-        if not price_ok: errs.append("Price is ongeldig. Gebruik 12,34 of 12.34.")
-        if errs:
-            for e in errs: st.error(e)
-        else:
-            new_row = {
-                "id": next_id(st.session_state.products),
-                "name": name.strip(),
-                "description": description.strip(),
-                "price": float(price),
-                "four_week_availability": int(fourw),
-                "supplier": supplier.strip(),
-            }
-            st.session_state.products = pd.concat([st.session_state.products, pd.DataFrame([new_row])], ignore_index=True)
-            save_data(); st.success(f"Product '{name.strip()}' toegevoegd."); st.rerun()
-
-    st.markdown("---")
-
-    if st.session_state.products.empty:
-        st.info("Nog geen producten.")
-    else:
-        prod_view = st.session_state.products.copy()
-        prod_view = coerce_columns(prod_view, {
-            "id":"int","name":"str","description":"str","price":"float","four_week_availability":"int","supplier":"str"
-        })
-        prod_view = prod_view.rename(columns={
-            "id":"ID","name":"Name","description":"Description","price":"Price",
-            "four_week_availability":"4w Availability","supplier":"Supplier"
-        })
-        prod_view.insert(0, "Select", False)
-
-        # Nettere dtypes voor editor + sorteerbaar
-        prod_view["ID"] = pd.to_numeric(prod_view["ID"], errors="coerce").fillna(0).astype(int)
-        prod_view["4w Availability"] = pd.to_numeric(prod_view["4w Availability"], errors="coerce").fillna(0).astype(int)
-        for _c in ["Name","Description","Supplier"]:
-            prod_view[_c] = prod_view[_c].astype("string").fillna("")
-        prod_view["Price"] = (
-            pd.to_numeric(prod_view["Price"], errors="coerce")
-            .apply(lambda v: "" if pd.isna(v) else f"{float(v):.2f}".replace(".", ","))
-            .astype("string")
-        )
-
-        st.subheader("✏️ Bewerken & Verwijderen")
-        edited = st.data_editor(
-            prod_view,
-            use_container_width=True,
-            hide_index=True,
-            num_rows="dynamic",
-            column_config={
-                "Select": st.column_config.CheckboxColumn(),
-                "ID": st.column_config.NumberColumn(disabled=True),
-                "Name": st.column_config.TextColumn(),
-                "Description": st.column_config.TextColumn(),
-                "Price": st.column_config.TextColumn(help="Gebruik 12,34 of 12.34"),
-                "4w Availability": st.column_config.NumberColumn(format="%d", min_value=0, step=1),
-                "Supplier": st.column_config.TextColumn(),
-            },
-            key="product_editor_v17",
-            column_order=None,  # <— sorteerbaar
-        )
-
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("💾 Wijzigingen opslaan (Products)", use_container_width=True):
-                try:
-                    to_save = edited.drop(columns=["Select"]).rename(columns={
-                        "ID":"id","Name":"name","Description":"description","Price":"price",
-                        "4w Availability":"four_week_availability","Supplier":"supplier"
-                    })
-                    if "price" in to_save.columns:
-                        to_save["price"] = to_save["price"].astype(str).str.replace(",", ".", regex=False)
-                        to_save["price"] = pd.to_numeric(to_save["price"], errors="coerce")
-                    to_save = coerce_columns(to_save, {
-                        "id":"int","name":"str","description":"str","price":"float",
-                        "four_week_availability":"int","supplier":"str"
-                    })
-                    st.session_state.products = to_save
-                    save_data(); st.success("Product-wijzigingen opgeslagen.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Opslaan mislukt: {e}")
-
-        with c2:
-            del_ids = edited.loc[edited["Select"] == True, "ID"].tolist()
-            if st.button("🗑️ Verwijder geselecteerde producten", use_container_width=True):
-                if not del_ids:
-                    st.warning("Selecteer eerst één of meer producten.")
-                else:
-                    st.session_state.products = st.session_state.products[~st.session_state.products["id"].isin(del_ids)]
-                    save_data(); st.success(f"Verwijderd: {del_ids}")
-                    st.rerun()
-# ------------------------------------------------------------
-# [End] Products
-# ------------------------------------------------------------
+        st.markdown(f"
