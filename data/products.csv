@@ -1,54 +1,51 @@
-﻿id;name;description;price;four_week_availability;supplier
-;Aglaonema Beauty;TC/Single;0,3;;JH
-;Alocasia Bambino;TC/Single;;;JH/CY
-;Alocasia Bambino Variegata;TC/Single;3;;JH
-;Alocasia Batik Variegata;TC/Single;0,5;;JH
-;Alocasia Frydek Variegated;TC/Single;0,8;;JH
-;Alocasia Gageana Aurea;TC/Single;0,45;;JH
-;Alocasia Lutea;TC/Single;0,45;;JH
-;Alocasia Macrorrhizos Camouflage ;TC/Single;0,8;;JH
-;Alocasia Silver Dragon;TC/Single;0,3;;JH
-;Alocasia Splash Variegated;TC/Single;1,5;;JH/GL
-;Alocasia Zebrina;TC/Single;0,32;;JH
-;Alpinia Zerumbet;TC/Single;0,22;;JH/CY
-;Alpinia Zerumbet;TC/Single;0,22;;JH
-;Apobalis Red Sword;TC/Single;0,28;;JH
-;Calathea Purple Rose;TC/Single;0,35;;JH
-;Dieffenbachia Tiki;TC/Single;0,25;;JH
-;Ficus Burgundy;TC/Single;;;JH
-;Fittonia Fitnia;TC/Single;0,25;;JH
-;Fittonia Flame;TC/Single;0,25;;JH
-;Fittonia Jungle Flame;TC/Single;0,25;;JH
-;Fittonia Lovers;TC/Single;0,25;;JH
-;Fittonia Snow Anne;TC/Single;0,25;;JH
-;Monstera Adansonii;TC/Single;0,23;;JH
-;Monstera Aure Variegata;TC/Single;6,5;;JH
-;Monstera Aurea Marmorata;TC/Single;7,5;;JH/GL
-;Monstera Green Snow;TC/Single;3;;JH/GL
-;Monstera Mint;TC/Single;3,5;;JH/GL
-;Monstera Mint;TC/Single;8;;JH
-;Monstera Super Golden;TC/Single;3;;JH/GL
-;Monstera Thai Consellation;TC/Single;0,8;;JH
-;Philodendron Birkin;TC/Single;0,2;;JH
-;Philodendron Black Cardinal;TC/Single;0,21;;JH
-;Philodendron Calkins;TC/Single;0,65;;JH
-;Philodendron Caramel Marble;TC/Single;6,5;;JH/GL
-;Philodendron Cherry Red;TC/Single;0,35;;JH
-;Philodendron Florida Ghost;TC/Single;0,4;;JH
-;Philodendron Gloriosum;TC/Single;0,28;;JH
-;Philodendron Green Congo Variegated;TC/Single;1,5;;JH/GL
-;Philodendron Hastatum;TC/Single;0,25;;JH
-;Philodendron Joepii;TC/Single;0,35;;JH
-;Philodendron Jose Bueno;TC/Single;0,65;;JH
-;Philodendron Orange Marmalade;TC/Single;0,8;;JH
-;Philodendron Paraioso Verde;TC/Single;;;JH
-;Philodendron Pink Marble;TC/Single;0,35;;JH
-;Philodendron Pink Princess;TC/Single;0,2;;JH
-;Philodendron Pluto Choco Empress;TC/Single;0,3;;JH
-;Philodendron Red Heart;TC/Single;0,35;;JH
-;Philodendron Snow Drift;TC/Single;0,7;;JH
-;Philodendron Squamiferum;TC/Single;0,4;;JH
-;Philodendron Verrucosum;TC/Single;0,35;;JH
-;Spathiphyllum Sensation Variegated;TC/Single;0,45;;JH
-;Syngonium Bronze Maria;TC/Single;0,14;;JH
-;Syngonium Milk Confetti;TC/Single;0,14;;JH
+id,name,description,price,four_week_availability,supplier
+1,Aglaonema Beauty,TC/Single,0.3,0,JH
+2,Alocasia Bambino Variegata,TC/Single,3.0,0,JH
+3,Alocasia Batik Variegata,TC/Single,0.5,0,JH
+4,Alocasia Frydek Variegated,TC/Single,0.8,0,JH
+5,Alocasia Gageana Aurea,TC/Single,0.45,0,JH
+6,Alocasia Lutea,TC/Single,0.45,0,JH
+7,Alocasia Macrorrhizos Camouflage,TC/Single,0.8,0,JH
+8,Alocasia Silver Dragon,TC/Single,0.3,0,JH
+9,Alocasia Splash Variegated,TC/Single,1.5,0,JH/GL
+10,Alocasia Zebrina,TC/Single,0.32,0,JH
+11,Alpinia Zerumbet,TC/Single,0.22,0,JH/CY
+12,Alpinia Zerumbet,TC/Single,0.22,0,JH
+13,Apobalis Red Sword,TC/Single,0.28,0,JH
+14,Calathea Purple Rose,TC/Single,0.35,0,JH
+15,Dieffenbachia Tiki,TC/Single,0.25,0,JH
+16,Fittonia Fitnia,TC/Single,0.25,0,JH
+17,Fittonia Flame,TC/Single,0.25,0,JH
+18,Fittonia Jungle Flame,TC/Single,0.25,0,JH
+19,Fittonia Lovers,TC/Single,0.25,0,JH
+20,Fittonia Snow Anne,TC/Single,0.25,0,JH
+21,Monstera Adansonii,TC/Single,0.23,0,JH
+22,Monstera Aure Variegata,TC/Single,6.5,0,JH
+23,Monstera Aurea Marmorata,TC/Single,7.5,0,JH/GL
+24,Monstera Green Snow,TC/Single,3.0,0,JH/GL
+25,Monstera Mint,TC/Single,3.5,0,JH/GL
+26,Monstera Mint,TC/Single,8.0,0,JH
+27,Monstera Super Golden,TC/Single,3.0,0,JH/GL
+28,Monstera Thai Consellation,TC/Single,0.8,0,JH
+29,Philodendron Birkin,TC/Single,0.2,0,JH
+30,Philodendron Black Cardinal,TC/Single,0.21,0,JH
+31,Philodendron Calkins,TC/Single,0.65,0,JH
+32,Philodendron Caramel Marble,TC/Single,6.5,0,JH/GL
+33,Philodendron Cherry Red,TC/Single,0.35,0,JH
+34,Philodendron Florida Ghost,TC/Single,0.4,0,JH
+35,Philodendron Gloriosum,TC/Single,0.28,0,JH
+36,Philodendron Green Congo Variegated,TC/Single,1.5,0,JH/GL
+37,Philodendron Hastatum,TC/Single,0.25,0,JH
+38,Philodendron Joepii,TC/Single,0.35,0,JH
+39,Philodendron Jose Bueno,TC/Single,0.65,0,JH
+40,Philodendron Orange Marmalade,TC/Single,0.8,0,JH
+41,Philodendron Pink Marble,TC/Single,0.35,0,JH
+42,Philodendron Pink Princess,TC/Single,0.2,0,JH
+43,Philodendron Pluto Choco Empress,TC/Single,0.3,0,JH
+44,Philodendron Red Heart,TC/Single,0.35,0,JH
+45,Philodendron Snow Drift,TC/Single,0.7,0,JH
+46,Philodendron Squamiferum,TC/Single,0.4,0,JH
+47,Philodendron Verrucosum,TC/Single,0.35,0,JH
+48,Spathiphyllum Sensation Variegated,TC/Single,0.45,0,JH
+49,Syngonium Bronze Maria,TC/Single,0.14,0,JH
+50,Syngonium Milk Confetti,TC/Single,0.14,0,JH
