@@ -271,14 +271,13 @@ def fmt_select_from_df(id_value, df_id_name: pd.DataFrame) -> str:
 
 
 # ------------------------------------------------------------
-# [Start] UI helper: Enter = volgende veld / submit (met selectbox-veiligheid)
+# [Start] UI helper: Enter = volgende veld / submit
 # ------------------------------------------------------------
 def enable_enter_navigation(submit_button_label: str):
     components.html(f"""
     <script>
     (function() {{
       const root = window.parent.document;
-
       function isEditable(el) {{
         if (!el) return false;
         const tag = el.tagName;
@@ -286,61 +285,29 @@ def enable_enter_navigation(submit_button_label: str):
         if (el.getAttribute && el.getAttribute('contenteditable') === 'true') return true;
         return false;
       }}
-
-      function isComboBox(el) {{
-        if (!el) return false;
-        if (el.getAttribute && el.getAttribute('role') === 'combobox') return true;
-        let p = el;
-        for (let i=0; i<3 && p; i++) {{
-          if (p.getAttribute && p.getAttribute('role') === 'combobox') return true;
-          p = p.parentElement;
-        }}
-        return false;
-      }}
-
       function getFocusableInputs() {{
         const all = Array.from(root.querySelectorAll('input, textarea'));
         return all.filter(el => !el.disabled && el.offsetParent !== null);
       }}
-
       function findSubmitButton(label) {{
         const btns = Array.from(root.querySelectorAll('button'));
         return btns.find(b => (b.innerText || '').trim() === label.trim());
       }}
-
       function focusNext(current) {{
         const inputs = getFocusableInputs();
         const idx = inputs.indexOf(current);
         if (idx === -1) return false;
         const next = inputs[idx + 1];
-        if (next) {{
-          next.focus();
-          if (next.setSelectionRange && next.value != null) {{
-            const len = next.value.length;
-            try {{ next.setSelectionRange(len, len); }} catch(e) {{}}
-          }}
-          return true;
-        }}
-        const btn = findSubmitButton("{submit_button_label}");
-        if (btn) btn.click();
-        return true;
+        if (next) {{ next.focus(); if (next.setSelectionRange && next.value != null) {{
+          const len = next.value.length; try {{ next.setSelectionRange(len, len); }} catch(e) {{}} }} return true; }}
+        const btn = findSubmitButton("{submit_button_label}"); if (btn) btn.click(); return true;
       }}
-
       function handler(e) {{
         if (e.key !== 'Enter') return;
         const active = root.activeElement;
-
-        // Laat Streamlit combobox zelf Enter/↑/↓ verwerken
-        if (isComboBox(active)) return;
-
         if (active && active.tagName === 'TEXTAREA' && e.shiftKey) return;
-
-        if (isEditable(active)) {{
-          e.preventDefault();
-          focusNext(active);
-        }}
+        if (isEditable(active)) {{ e.preventDefault(); focusNext(active); }}
       }}
-
       root.addEventListener('keydown', handler, true);
     }})();
     </script>
@@ -380,6 +347,12 @@ def build_orders_display_df() -> pd.DataFrame:
             "Customer","Article","Description","Amount","Price","Sales Price","Supplier",
             "Weeknumber","Date of Weeknumber","Year","_OID","_CID","_PID"
         ])
+
+    # >>> DEDUPE om vermenigvuldiging door dubbele CSV-rijen te voorkomen
+    if not products.empty and "id" in products.columns:
+        products = products.sort_values("id").drop_duplicates("id", keep="last")
+    if not customers.empty and "id" in customers.columns:
+        customers = customers.sort_values("id").drop_duplicates("id", keep="last")
 
     if not products.empty:
         prod = products.rename(columns={"id":"_PID_join"})
@@ -422,8 +395,11 @@ def build_orders_display_df() -> pd.DataFrame:
     view_cols = ["Customer","Article","Description","Amount","Price","Sales Price","Supplier",
                  "Weeknumber","Date of Weeknumber","Year","_OID","_CID","_PID"]
     df = orders.reindex(columns=view_cols).copy()
+
+    # Filter ongeldige/lege regels weg
     for c in ["Customer","Article","Description","Supplier"]:
         df[c] = df[c].astype("string").fillna("")
+    df = df[(df["Customer"] != "") & (df["Article"] != "")]
     return df
 
 def _excel_export_bytes(df: pd.DataFrame, title: str) -> BytesIO:
@@ -543,6 +519,9 @@ if page == "Dashboard":
 elif page == "Orders":
     st.title("📦 Orders")
 
+    # Laatst gekozen customer vasthouden
+    st.session_state.setdefault("last_customer_id", None)
+
     # ----- Nieuwe order -----
     st.subheader("➕ Nieuwe order")
     if st.session_state.customers.empty or st.session_state.products.empty:
@@ -550,44 +529,42 @@ elif page == "Orders":
     else:
         with st.form("add_order_form", clear_on_submit=True):
             cA, cB = st.columns(2)
-
-            # Laatste gekozen customer onthouden
-            last_cid = st.session_state.get("last_customer_id")
-
             with cA:
-                cust_ids = st.session_state.customers["id"].dropna().astype(int).tolist()
-                cust_options = [None] + cust_ids
-                cust_index = 0
-                if last_cid in cust_options:
-                    cust_index = cust_options.index(last_cid)
+                # Optielijsten
+                cust_df = st.session_state.customers.dropna(subset=["id"]).copy()
+                cust_df["id"] = cust_df["id"].astype(int)
+                cust_ids = cust_df["id"].tolist()
+
+                prod_df = st.session_state.products.dropna(subset=["id"]).copy()
+                prod_df["id"] = prod_df["id"].astype(int)
+                # Label: "Product — Supplier"
+                prod_df["label"] = prod_df.apply(
+                    lambda r: f"{r['name']} — {r['supplier']}" if pd.notna(r["supplier"]) and str(r["supplier"]).strip()
+                    else str(r["name"]),
+                    axis=1
+                )
+                prod_ids = prod_df["id"].tolist()
+                id_to_label = dict(zip(prod_df["id"], prod_df["label"]))
+
+                # Customer met default: laatst gekozen
+                default_customer = st.session_state.get("last_customer_id")
+                default_index = 0
+                if default_customer in cust_ids:
+                    default_index = cust_ids.index(default_customer) + 1  # +1 door None-optie
 
                 sel_customer = st.selectbox(
                     "Customer *",
-                    options=cust_options,
+                    options=[None] + cust_ids,
                     format_func=lambda i: "" if i is None else fmt_select_from_df(i, st.session_state.customers),
-                    index=cust_index,
+                    index=default_index
                 )
 
-                # Products met "Product — Supplier" in dropdown + type-ahead/enter
-                prods = st.session_state.products.copy()
-                prods = coerce_columns(prods, {"id":"int","name":"str","supplier":"str"})
-                prod_ids = prods["id"].dropna().astype(int).tolist()
-
-                def _fmt_product(i):
-                    if i is None:
-                        return ""
-                    row = prods.loc[prods["id"] == int(i)]
-                    if row.empty:
-                        return ""
-                    r = row.iloc[0]
-                    return f"{r['name']} — {r['supplier']}".strip()
-
+                # Productselect toont "Product — Supplier"
                 sel_product = st.selectbox(
                     "Article (Product) *",
                     options=[None] + prod_ids,
-                    format_func=_fmt_product,
-                    index=0,
-                    help="Typ om te filteren. Gebruik ↑/↓ en Enter om te kiezen."
+                    format_func=lambda i: "" if i is None else id_to_label.get(int(i), ""),
+                    index=0
                 )
 
                 amount = st.number_input("Amount *", min_value=1, step=1, value=1)
@@ -647,7 +624,6 @@ elif page == "Orders":
                     )
                     # Onthoud laatst gekozen customer
                     st.session_state["last_customer_id"] = int(sel_customer)
-
                     save_data()
                     st.success(f"Toegevoegd: {len(rows)} order(s) voor weken: {', '.join(map(str, weeks))}")
                     st.rerun()
@@ -659,7 +635,7 @@ elif page == "Orders":
 
     # ----- Filters -----
     with st.expander("🔎 Filters (tabel & export)"):
-        f1, f2, f3, f4 = st.columns(4)
+        f1, f2, f3, f4, f5 = st.columns(5)
         with f1:
             flt_customer = st.multiselect("Customer", options=sorted(base_df["Customer"].dropna().astype(str).unique().tolist()))
         with f2:
@@ -669,21 +645,29 @@ elif page == "Orders":
         with f4:
             unique_weeks = sorted(base_df["Weeknumber"].dropna().astype(int).unique().tolist())
             flt_weeks = st.multiselect("Weeknumber", options=unique_weeks)
+        with f5:
+            unique_years = sorted(base_df["Year"].dropna().astype(int).unique().tolist())
+            flt_years = st.multiselect("Year", options=unique_years)
 
     filtered_df = base_df.copy()
     if flt_customer: filtered_df = filtered_df[filtered_df["Customer"].isin(flt_customer)]
     if flt_supplier: filtered_df = filtered_df[filtered_df["Supplier"].isin(flt_supplier)]
     if flt_article:  filtered_df = filtered_df[filtered_df["Article"].isin(flt_article)]
     if flt_weeks:    filtered_df = filtered_df[filtered_df["Weeknumber"].isin(flt_weeks)]
+    if flt_years:    filtered_df = filtered_df[filtered_df["Year"].isin(flt_years)]
 
-    # ----- Tabel bewerken (klik op kolomtitel om te sorteren) -----
+    # ===== SORTEER-Viewer (klik op kolomkop) =====
     if filtered_df.empty:
         st.info("Geen orders gevonden (controleer je filters).")
     else:
+        st.markdown("#### 🔎 Snel sorteren (klik op kolomkop)")
         show_cols = ["Customer","Article","Description","Amount","Price","Sales Price","Supplier",
                      "Weeknumber","Date of Weeknumber","Year"]
-        editor_df = filtered_df[show_cols + ["_OID"]].copy()
+        st.dataframe(filtered_df[show_cols], use_container_width=True)
 
+        # ===== Editor =====
+        display_df = filtered_df[show_cols + ["_OID"]].copy()
+        editor_df = display_df.copy()
         editor_df.insert(0, "Select", False)
         editor_df.set_index("_OID", inplace=True)
         for c in ["Customer","Article","Description","Supplier"]:
@@ -695,8 +679,7 @@ elif page == "Orders":
             .astype("string")
         )
 
-        st.caption("Tip: klik op een **kolomtitel** om te sorteren (nog eens klikken = omdraaien).")
-        st.subheader("📋 Orders (bewerken, selecteren en verwijderen)")
+        st.subheader("✏️ Bewerken / Verwijderen")
         edited = st.data_editor(
             editor_df,
             use_container_width=True,
@@ -753,10 +736,19 @@ elif page == "Orders":
 
         # ----- Export -----
         st.markdown("### ⬇️ Export Excel (pivot per week)")
-        cust_rows = ["Customer","Article","Description","Sales Price","Supplier"]
-        cust_pivot = make_pivot_amount(filtered_df[cust_rows + ["Weeknumber","Amount"]], cust_rows)
+        inc_sp = st.checkbox("Include 'Sales Price' as grouping column in Customer export", value=False)
+
+        export_df = filtered_df.copy()
+        export_df = export_df[(export_df["Customer"] != "") & (export_df["Article"] != "")]
+
+        cust_rows = ["Customer","Article","Description","Supplier"]
+        if inc_sp:
+            cust_rows = ["Customer","Article","Description","Sales Price","Supplier"]
+
+        cust_pivot = make_pivot_amount(export_df[cust_rows + ["Weeknumber","Amount"]], cust_rows)
         sup_rows  = ["Supplier","Article","Description","Customer"]
-        sup_pivot = make_pivot_amount(filtered_df[sup_rows + ["Weeknumber","Amount"]], sup_rows)
+        sup_pivot = make_pivot_amount(export_df[sup_rows + ["Weeknumber","Amount"]], sup_rows)
+
         cust_disabled = cust_pivot.empty; sup_disabled = sup_pivot.empty
         cust_file = _excel_export_bytes(cust_pivot, f"GPC Orders {datetime.now().year}") if not cust_disabled else None
         sup_file  = _excel_export_bytes(sup_pivot,  f"GPC Orders {datetime.now().year}") if not sup_disabled else None
@@ -944,7 +936,7 @@ elif page == "Products":
                         else:
                             st.error("Kon de rij niet uniek vinden op ID.")
 
-    # ===== Tabel voor producten =====
+    # ===== SORTEER-Viewer voor producten =====
     if st.session_state.products.empty:
         st.info("Nog geen producten.")
     else:
@@ -953,54 +945,29 @@ elif page == "Products":
             "id":"int","name":"str","description":"str","price":"float",
             "four_week_availability":"int","supplier":"str"
         })
-        prod_view = prod_view.rename(columns={
+        nice_view = prod_view.rename(columns={
             "id":"ID","name":"Name","description":"Description","price":"Price",
             "four_week_availability":"4w Availability","supplier":"Supplier"
         })
-        prod_view.insert(0, "Select", False)
-        prod_view["ID"] = pd.to_numeric(prod_view["ID"], errors="coerce").fillna(0).astype(int)
-        prod_view["4w Availability"] = pd.to_numeric(prod_view["4w Availability"], errors="coerce").fillna(0).astype(int)
+        st.markdown("#### 🔎 Snel sorteren (klik op kolomkop)")
+        st.dataframe(nice_view[["ID","Name","Description","Price","4w Availability","Supplier"]], use_container_width=True)
+
+        # ===== Editor =====
+        edit_df = nice_view.copy()
+        edit_df.insert(0, "Select", False)
+        edit_df["ID"] = pd.to_numeric(edit_df["ID"], errors="coerce").fillna(0).astype(int)
+        edit_df["4w Availability"] = pd.to_numeric(edit_df["4w Availability"], errors="coerce").fillna(0).astype(int)
         for _c in ["Name","Description","Supplier"]:
-            prod_view[_c] = prod_view[_c].astype("string").fillna("")
-        prod_view["Price"] = (
-            pd.to_numeric(prod_view["Price"], errors="coerce")
+            edit_df[_c] = edit_df[_c].astype("string").fillna("")
+        edit_df["Price"] = (
+            pd.to_numeric(edit_df["Price"], errors="coerce")
               .apply(lambda v: "" if pd.isna(v) else f"{float(v):.2f}".replace(".", ","))
               .astype("string")
         )
 
-        # ---- Sortering voor products (via selecties)
-        st.subheader("↕️ Sortering")
-        p_sort_options = ["Name","Supplier","4w Availability","ID","Price","Description"]
-        ps1, ps2, ps3 = st.columns([3,3,2])
-        with ps1:
-            p_sort1 = st.selectbox("Sorteer op", options=p_sort_options, index=0, key="p_sort1")
-        with ps2:
-            p_sort2 = st.selectbox("Daarna op (optioneel)", options=["(geen)"] + p_sort_options, index=0, key="p_sort2")
-        with ps3:
-            p_asc = st.checkbox("Oplopend", value=True, key="p_asc")
-
-        _pview = prod_view.copy()
-        _pview["_PriceNum"] = pd.to_numeric(
-            _pview["Price"].astype(str).str.replace(",", ".", regex=False),
-            errors="coerce"
-        )
-
-        def _p_resolve(colname: str) -> str:
-            if colname == "Price": return "_PriceNum"
-            return colname
-
-        p_sort_by = [_p_resolve(p_sort1)]
-        if p_sort2 != "(geen)":
-            p_sort_by.append(_p_resolve(p_sort2))
-            p_ascending = [p_asc, p_asc]
-        else:
-            p_ascending = [p_asc]
-
-        _pview = _pview.sort_values(by=p_sort_by, ascending=p_ascending, kind="mergesort")
-
         st.subheader("✏️ Bewerken & Verwijderen")
         edited = st.data_editor(
-            _pview.drop(columns=["_PriceNum"]),
+            edit_df,
             use_container_width=True,
             hide_index=True,
             num_rows="dynamic",
@@ -1051,7 +1018,7 @@ elif page == "Products":
                     st.success(f"Verwijderd: {del_ids}")
                     st.rerun()
 
-    # ===== Reparatie / import-check (staat nu netjes alleen op deze pagina) =====
+    # ===== Reparatie / import-check (enkel op deze pagina) =====
     with st.expander("🛠️ Reparatie / import-check voor products.csv (GitHub)"):
         st.info("Hier kun je het productbestand controleren of repareren als import mislukt is.")
         st.markdown("*(Alleen zichtbaar op de Products-pagina)*")
