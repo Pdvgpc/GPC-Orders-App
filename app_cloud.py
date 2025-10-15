@@ -342,56 +342,74 @@ def build_orders_display_df() -> pd.DataFrame:
     products  = st.session_state.products.copy()
     customers = st.session_state.customers.copy()
 
+    empty_cols = [
+        "Customer","Article","Description","Amount","Price","Sales Price","Supplier",
+        "Weeknumber","Date of Weeknumber","Year","_OID","_CID","_PID"
+    ]
     if orders.empty:
-        return pd.DataFrame(columns=[
-            "Customer","Article","Description","Amount","Price","Sales Price","Supplier",
-            "Weeknumber","Date of Weeknumber","Year","_OID","_CID","_PID"
-        ])
+        return pd.DataFrame(columns=empty_cols)
 
-    if not products.empty:
-        prod = products.rename(columns={"id":"_PID_join"})
-        orders = orders.merge(
-            prod[["_PID_join","name","description","price","supplier"]],
-            left_on="product_id", right_on="_PID_join", how="left"
-        )
-    else:
-        orders["_PID_join"] = None
-        orders["name"] = ""
-        orders["description"] = ""
-        orders["price"] = None
-        orders["supplier"] = ""
+    # Types normaliseren voor betrouwbare joins
+    for df, int_cols in [
+        (orders,   ["id","customer_id","product_id","quantity","week_number","year"]),
+        (products, ["id"]),
+        (customers,["id"]),
+    ]:
+        for c in int_cols:
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors="coerce")
 
-    if not customers.empty:
-        cust = customers.rename(columns={"id":"_CID_join"})
-        orders = orders.merge(
-            cust[["_CID_join","name"]],
-            left_on="customer_id", right_on="_CID_join", how="left", suffixes=("","_cust")
-        )
-        orders["Customer"] = orders["name_cust"].fillna("")
-    else:
-        orders["_CID_join"] = None
-        orders["Customer"] = ""
+    # Join met products
+    prod = products.rename(columns={"id":"_PID_join"})
+    orders = orders.merge(
+        prod[["_PID_join","name","description","price","supplier"]],
+        left_on="product_id", right_on="_PID_join", how="left"
+    )
 
-    orders["Article"] = orders["name"].fillna("")
-    orders["Description"] = orders["description"].fillna("")
-    orders["Amount"] = pd.to_numeric(orders["quantity"], errors="coerce").fillna(0).astype(int)
-    orders["Price"] = pd.to_numeric(orders["price"], errors="coerce")
-    orders["Sales Price"] = pd.to_numeric(orders["sales_price"], errors="coerce")
-    orders["Supplier"] = orders["supplier"].astype("string").fillna("")
-    orders["Weeknumber"] = pd.to_numeric(orders["week_number"], errors="coerce").fillna(0).astype(int)
-    orders["Year"] = pd.to_numeric(orders["year"], errors="coerce").fillna(0).astype(int)
-    orders["Date of Weeknumber"] = orders.apply(lambda r: week_start_date(r["Year"], r["Weeknumber"]), axis=1)
+    # Join met customers
+    cust = customers.rename(columns={"id":"_CID_join"})
+    orders = orders.merge(
+        cust[["_CID_join","name"]],
+        left_on="customer_id", right_on="_CID_join", how="left", suffixes=("","_cust")
+    )
 
+    # Alleen valide regels
+    m_valid = (
+        orders["_PID_join"].notna() &
+        orders["_CID_join"].notna() &
+        pd.to_numeric(orders["quantity"], errors="coerce").fillna(0).gt(0) &
+        pd.to_numeric(orders["week_number"], errors="coerce").between(1,53) &
+        pd.to_numeric(orders["year"], errors="coerce").between(2000, 2100)
+    )
+    orders = orders.loc[m_valid].copy()
+    if orders.empty:
+        return pd.DataFrame(columns=empty_cols)
+
+    # Presentatiekolommen
+    orders["Customer"]     = orders["name_cust"].fillna("").astype("string")
+    orders["Article"]      = orders["name"].fillna("").astype("string")
+    orders["Description"]  = orders["description"].fillna("").astype("string")
+    orders["Amount"]       = pd.to_numeric(orders["quantity"], errors="coerce").fillna(0).astype(int)
+    orders["Price"]        = pd.to_numeric(orders["price"], errors="coerce")  # uit product
+    orders["Sales Price"]  = pd.to_numeric(orders["sales_price"], errors="coerce")  # uit order
+    orders["Supplier"]     = orders["supplier"].fillna("").astype("string")
+    orders["Weeknumber"]   = pd.to_numeric(orders["week_number"], errors="coerce").astype(int)
+    orders["Year"]         = pd.to_numeric(orders["year"], errors="coerce").astype(int)
+    orders["Date of Weeknumber"] = orders.apply(
+        lambda r: week_start_date(r["Year"], r["Weeknumber"]), axis=1
+    )
+
+    # IDs
     orders["_OID"] = pd.to_numeric(orders["id"], errors="coerce").astype("Int64")
     orders["_CID"] = pd.to_numeric(orders["customer_id"], errors="coerce").astype("Int64")
     orders["_PID"] = pd.to_numeric(orders["product_id"], errors="coerce").astype("Int64")
 
-    view_cols = ["Customer","Article","Description","Amount","Price","Sales Price","Supplier",
-                 "Weeknumber","Date of Weeknumber","Year","_OID","_CID","_PID"]
-    df = orders.reindex(columns=view_cols).copy()
-    for c in ["Customer","Article","Description","Supplier"]:
-        df[c] = df[c].astype("string").fillna("")
-    return df
+    view_cols = [
+        "Customer","Article","Description","Amount","Price","Sales Price","Supplier",
+        "Weeknumber","Date of Weeknumber","Year","_OID","_CID","_PID"
+    ]
+    return orders.reindex(columns=view_cols).copy()
+
 
 def _excel_export_bytes(df: pd.DataFrame, title: str) -> BytesIO:
     df = df.copy().fillna("")
@@ -510,68 +528,59 @@ if page == "Dashboard":
 elif page == "Orders":
     st.title("📦 Orders")
 
-    # ----- Nieuwe order -----
+    # --- Onthoud laatste gekozen klant
+    st.session_state.setdefault("last_customer_id", None)
+
+    # ===== Nieuwe order =====
     st.subheader("➕ Nieuwe order")
     if st.session_state.customers.empty or st.session_state.products.empty:
         st.warning("Je hebt klanten én producten nodig om een order toe te voegen.")
     else:
-        # Onthoud laatst gekozen klant
-        st.session_state.setdefault("last_customer_id", None)
-
         with st.form("add_order_form", clear_on_submit=True):
             cA, cB = st.columns(2)
             with cA:
-                # ===== Customer select (met onthouden) =====
-                cust_df = st.session_state.customers[["id","name"]].copy()
+                # Customer labels
+                cust_df = st.session_state.customers.copy()
+                cust_df["id"] = pd.to_numeric(cust_df["id"], errors="coerce")
                 cust_df = cust_df.dropna(subset=["id"])
-                cust_ids = cust_df["id"].astype(int).tolist()
-                cust_labels = {int(r.id): str(r.name) for _, r in cust_df.iterrows()}
-                cust_options = [(-1, "")] + [(cid, cust_labels.get(cid, str(cid))) for cid in cust_ids]
+                cust_df["id"] = cust_df["id"].astype(int)
+                cust_df["label"] = cust_df["name"].astype(str) + "  [ID " + cust_df["id"].astype(str) + "]"
 
-                # default index op last_customer_id
-                def_index = 0
-                if st.session_state["last_customer_id"] in cust_labels:
-                    try:
-                        def_index = 1 + [cid for cid, _ in cust_options[1:]].index(st.session_state["last_customer_id"])
-                    except ValueError:
-                        def_index = 0
+                cust_labels = cust_df["label"].tolist()
+                cust_by_label = dict(zip(cust_df["label"], cust_df["id"]))
 
-                sel_cust_label = st.selectbox(
-                    "Customer *",
-                    options=[lbl for (_id, lbl) in cust_options],
-                    index=def_index,
-                )
-                sel_customer = next((_id for (_id, lbl) in cust_options if lbl == sel_cust_label), None)
-                if sel_customer == -1:
-                    sel_customer = None
+                # Voorselectie = laatste klant indien nog aanwezig
+                default_customer_idx = 0
+                if st.session_state["last_customer_id"] in cust_df["id"].values:
+                    default_customer_idx = cust_labels.index(
+                        cust_df.loc[cust_df["id"] == st.session_state["last_customer_id"], "label"].iloc[0]
+                    )
 
-                # ===== Product select (toon “Product — Supplier”, pijltjes/Enter werkt) =====
-                prod_df = st.session_state.products[["id","name","supplier"]].copy()
+                sel_customer_label = st.selectbox("Customer *", options=["— kies —"] + cust_labels, index=default_customer_idx+1 if cust_labels else 0)
+                sel_customer = None if sel_customer_label == "— kies —" else cust_by_label.get(sel_customer_label)
+
+                # Product labels: "Name — Supplier"
+                prod_df = st.session_state.products.copy()
+                prod_df["id"] = pd.to_numeric(prod_df["id"], errors="coerce")
                 prod_df = prod_df.dropna(subset=["id"])
-                prod_df["label"] = prod_df.apply(
-                    lambda r: f"{str(r['name'])} — {str(r['supplier'])}".strip(" —"),
-                    axis=1
-                )
-                prod_options = [(-1, "")] + [(int(r.id), r.label) for _, r in prod_df.iterrows()]
+                prod_df["id"] = prod_df["id"].astype(int)
+                prod_df["label"] = prod_df["name"].astype(str) + " — " + prod_df["supplier"].astype(str)
 
-                sel_prod_label = st.selectbox(
-                    "Article (Product) *",
-                    options=[lbl for (_id, lbl) in prod_options],
-                    index=0,
-                )
-                sel_product = next((_id for (_id, lbl) in prod_options if lbl == sel_prod_label), None)
-                if sel_product == -1:
-                    sel_product = None
+                prod_labels = prod_df["label"].tolist()
+                prod_by_label = dict(zip(prod_df["label"], prod_df["id"]))
+
+                sel_product_label = st.selectbox("Article (Product) *", options=["— kies —"] + prod_labels, index=0)
+                sel_product = None if sel_product_label == "— kies —" else prod_by_label.get(sel_product_label)
 
                 amount = st.number_input("Amount *", min_value=1, step=1, value=1)
 
             with cB:
-                # Komma/2 dec toestaan in formulier
+                # Komma/2 dec toestaan
                 sales_price, sp_ok = money_input(
                     "Sales Price (optional)",
                     value=0.00,
                     key="oi_sales_price",
-                    help="Gebruik 12,34 of 12.34 (2 decimalen)."
+                    help="Gebruik 12,34 of 12.34 (2 decimalen). Pijltjes/Enter werken in lijsten."
                 )
                 weeks_txt = st.text_input("Weeknumbers * (comma separated, e.g. 4,8,12)", value="")
                 year = st.number_input("Year *", min_value=2020, max_value=2100, step=1, value=datetime.now().year)
@@ -618,7 +627,7 @@ elif page == "Orders":
                     st.session_state.orders = pd.concat(
                         [st.session_state.orders, pd.DataFrame(rows)], ignore_index=True
                     )
-                    # Onthoud klant voor volgende invoer
+                    # Onthoud laatst gekozen klant
                     st.session_state["last_customer_id"] = int(sel_customer)
                     save_data()
                     st.success(f"Toegevoegd: {len(rows)} order(s) voor weken: {', '.join(map(str, weeks))}")
@@ -626,10 +635,10 @@ elif page == "Orders":
 
     st.markdown("---")
 
-    # ----- Bouw basis weergave -----
+    # ===== Bouw basis weergave =====
     base_df = build_orders_display_df()
 
-    # ----- Filters -----
+    # ===== Filters =====
     with st.expander("🔎 Filters (tabel & export)"):
         f1, f2, f3, f4 = st.columns(4)
         with f1:
@@ -648,95 +657,135 @@ elif page == "Orders":
     if flt_article:  filtered_df = filtered_df[filtered_df["Article"].isin(flt_article)]
     if flt_weeks:    filtered_df = filtered_df[filtered_df["Weeknumber"].isin(flt_weeks)]
 
-    # ----- Tabel bewerken -----
+    # ===== Tabel: twee modi (Bewerken vs Sorteren/Filteren)
+    st.subheader("📋 Orders (bewerken / sorteren)")
+    mode = st.radio("Modus", ["Bewerken", "Sorteren/Filteren"], horizontal=True, key="orders_table_mode")
+
+    show_cols = ["Customer","Article","Description","Amount","Price","Sales Price","Supplier",
+                 "Weeknumber","Date of Weeknumber","Year"]
+
     if filtered_df.empty:
         st.info("Geen orders gevonden (controleer je filters).")
     else:
-        show_cols = ["Customer","Article","Description","Amount","Price","Sales Price","Supplier",
-                     "Weeknumber","Date of Weeknumber","Year"]
-        display_df = filtered_df[show_cols + ["_OID"]].copy()
+        if mode == "Sorteren/Filteren":
+            # Eén tabel, sorteerbaar door op kopjes te klikken
+            view_df = filtered_df[show_cols + ["_OID"]].copy()
+            st.dataframe(view_df.set_index("_OID"), use_container_width=True)
+        else:
+            # Bewerken
+            display_df = filtered_df[show_cols + ["_OID"]].copy()
+            editor_df = display_df.copy()
+            editor_df.insert(0, "Select", False)
+            editor_df.set_index("_OID", inplace=True)
+            for c in ["Customer","Article","Description","Supplier"]:
+                editor_df[c] = editor_df[c].astype("string")
+            editor_df["Date of Weeknumber"] = editor_df["Date of Weeknumber"].astype(str)
+            # Sales Price als string (0,75)
+            editor_df["Sales Price"] = (
+                pd.to_numeric(editor_df["Sales Price"], errors="coerce")
+                  .apply(lambda v: "" if pd.isna(v) else f"{float(v):.2f}".replace(".", ","))
+                  .astype("string")
+            )
 
-        editor_df = display_df.copy()
-        editor_df.insert(0, "Select", False)
-        editor_df.set_index("_OID", inplace=True)
-        for c in ["Customer","Article","Description","Supplier"]:
-            editor_df[c] = editor_df[c].astype("string")
-        editor_df["Date of Weeknumber"] = editor_df["Date of Weeknumber"].astype(str)
+            edited = st.data_editor(
+                editor_df,
+                use_container_width=True,
+                num_rows="dynamic",
+                column_config={
+                    "Select": st.column_config.CheckboxColumn(help="Selecteer voor verwijderen"),
+                    "Amount": st.column_config.NumberColumn(format="%d", min_value=0),
+                    "Weeknumber": st.column_config.NumberColumn(format="%d", min_value=1, max_value=53),
+                    "Year": st.column_config.NumberColumn(format="%d", min_value=2020, max_value=2100),
+                    "Sales Price": st.column_config.TextColumn(help="Gebruik 12,34 of 12.34"),
+                    "Price": st.column_config.NumberColumn(format="%.2f", min_value=0.0, step=0.01, disabled=True),
+                    "Date of Weeknumber": st.column_config.TextColumn(disabled=True),
+                    "Supplier": st.column_config.TextColumn(disabled=True),
+                    "Customer": st.column_config.TextColumn(disabled=True),
+                    "Article": st.column_config.TextColumn(disabled=True),
+                    "Description": st.column_config.TextColumn(disabled=True),
+                },
+                hide_index=False,
+                disabled=["Customer","Article","Description","Supplier","Date of Weeknumber","Price"],
+                key="orders_editor_v18",
+            )
 
-        st.subheader("📋 Orders (bewerken, selecteren en verwijderen)")
-        edited = st.data_editor(
-            editor_df,
-            use_container_width=True,
-            num_rows="dynamic",
-            column_config={
-                "Select": st.column_config.CheckboxColumn(help="Selecteer voor verwijderen"),
-                "Amount": st.column_config.NumberColumn(format="%d", min_value=0),
-                "Weeknumber": st.column_config.NumberColumn(format="%d", min_value=1, max_value=53),
-                "Year": st.column_config.NumberColumn(format="%d", min_value=2020, max_value=2100),
-                # Belangrijk: numeriek => één kolom, sorteerbaar & editable
-                "Sales Price": st.column_config.NumberColumn(format="%.2f", min_value=0.0, step=0.01),
-                "Price": st.column_config.NumberColumn(format="%.2f", min_value=0.0, step=0.01, disabled=True),
-                "Date of Weeknumber": st.column_config.TextColumn(disabled=True),
-                "Supplier": st.column_config.TextColumn(disabled=True),
-                "Customer": st.column_config.TextColumn(disabled=True),
-                "Article": st.column_config.TextColumn(disabled=True),
-                "Description": st.column_config.TextColumn(disabled=True),
-            },
-            hide_index=False,
-            disabled=["Customer","Article","Description","Supplier","Date of Weeknumber","Price"],
-            key="orders_editor_v17",
-        )
+            selected_ids = edited.index[edited["Select"] == True].tolist()
+            c1, c2, _ = st.columns([1,1,6])
 
-        selected_ids = edited.index[edited["Select"] == True].tolist()
-        c1, c2, _ = st.columns([1,1,6])
+            with c1:
+                if st.button("🗑️ Verwijder geselecteerde orders", use_container_width=True):
+                    if not selected_ids:
+                        st.warning("Selecteer eerst één of meer orders.")
+                    else:
+                        st.session_state.orders = st.session_state.orders[~st.session_state.orders["id"].isin(selected_ids)]
+                        save_data(); st.success(f"Verwijderd: {selected_ids}"); st.rerun()
 
-        with c1:
-            if st.button("🗑️ Verwijder geselecteerde orders", use_container_width=True):
-                if not selected_ids:
-                    st.warning("Selecteer eerst één of meer orders.")
-                else:
-                    st.session_state.orders = st.session_state.orders[~st.session_state.orders["id"].isin(selected_ids)]
-                    save_data(); st.success(f"Verwijderd: {selected_ids}"); st.rerun()
+            with c2:
+                if st.button("💾 Opslaan wijzigingen", use_container_width=True):
+                    base = st.session_state.orders.set_index("id")
+                    for _oid, row in edited.iterrows():
+                        if _oid in base.index:
+                            if pd.notna(row.get("Amount")):
+                                base.at[_oid, "quantity"] = int(row["Amount"])
+                            if pd.notna(row.get("Weeknumber")):
+                                base.at[_oid, "week_number"] = int(row["Weeknumber"])
+                            if pd.notna(row.get("Year")):
+                                base.at[_oid, "year"] = int(row["Year"])
+                            sp = row.get("Sales Price")
+                            if pd.notna(sp) and sp != "":
+                                try:
+                                    sp_norm = float(sp.replace(",", ".")) if isinstance(sp, str) else float(sp)
+                                    base.at[_oid, "sales_price"] = round(sp_norm, 2)
+                                except Exception:
+                                    pass
+                    st.session_state.orders = base.reset_index()
+                    save_data(); st.success("Wijzigingen opgeslagen."); st.rerun()
 
-        with c2:
-            if st.button("💾 Opslaan wijzigingen", use_container_width=True):
-                base = st.session_state.orders.set_index("id")
-                for _oid, row in edited.iterrows():
-                    if _oid in base.index:
-                        if pd.notna(row.get("Amount")):
-                            base.at[_oid, "quantity"] = int(row["Amount"])
-                        if pd.notna(row.get("Weeknumber")):
-                            base.at[_oid, "week_number"] = int(row["Weeknumber"])
-                        if pd.notna(row.get("Year")):
-                            base.at[_oid, "year"] = int(row["Year"])
-                        # numeriek wegschrijven
-                        if pd.notna(row.get("Sales Price")):
-                            base.at[_oid, "sales_price"] = float(row["Sales Price"])
-                st.session_state.orders = base.reset_index()
-                save_data(); st.success("Wijzigingen opgeslagen."); st.rerun()
-
-        # ----- Export -----
+        # ===== Export (schone input -> pivot)
         st.markdown("### ⬇️ Export Excel (pivot per week)")
+
+        export_df = filtered_df.copy()
+        export_df["Amount"] = pd.to_numeric(export_df["Amount"], errors="coerce").fillna(0).astype(int)
+        export_df = export_df[export_df["Amount"] > 0].copy()
+        export_df = export_df[
+            export_df["Weeknumber"].between(1,53) &
+            export_df["Year"].between(2000,2100)
+        ].copy()
+        for c in ["Customer","Article","Supplier"]:
+            export_df[c] = export_df[c].fillna("").astype(str)
+
         cust_rows = ["Customer","Article","Description","Sales Price","Supplier"]
-        cust_pivot = make_pivot_amount(filtered_df[cust_rows + ["Weeknumber","Amount"]], cust_rows)
+        cust_src = export_df[cust_rows + ["Weeknumber","Amount"]].copy()
+
         sup_rows  = ["Supplier","Article","Description","Customer"]
-        sup_pivot = make_pivot_amount(filtered_df[sup_rows + ["Weeknumber","Amount"]], sup_rows)
-        cust_disabled = cust_pivot.empty; sup_disabled = sup_pivot.empty
+        sup_src   = export_df[sup_rows + ["Weeknumber","Amount"]].copy()
+
+        cust_pivot = make_pivot_amount(cust_src, cust_rows)
+        sup_pivot  = make_pivot_amount(sup_src,  sup_rows)
+
+        cust_disabled = cust_pivot.empty
+        sup_disabled  = sup_pivot.empty
+
         cust_file = _excel_export_bytes(cust_pivot, f"GPC Orders {datetime.now().year}") if not cust_disabled else None
         sup_file  = _excel_export_bytes(sup_pivot,  f"GPC Orders {datetime.now().year}") if not sup_disabled else None
+
         e1, e2 = st.columns(2)
         with e1:
-            st.download_button("⬇️ Export Excel Customer",
+            st.download_button(
+                "⬇️ Export Excel Customer",
                 data=cust_file.getvalue() if cust_file else b"",
                 file_name=f"GPC_Orders_Customer_{datetime.now().year}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True, disabled=cust_disabled)
+                use_container_width=True, disabled=cust_disabled
+            )
         with e2:
-            st.download_button("⬇️ Export Excel Supplier",
+            st.download_button(
+                "⬇️ Export Excel Supplier",
                 data=sup_file.getvalue() if sup_file else b"",
                 file_name=f"GPC_Orders_Supplier_{datetime.now().year}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True, disabled=sup_disabled)
+                use_container_width=True, disabled=sup_disabled
+            )
 # ------------------------------------------------------------
 # [End] Orders
 # ------------------------------------------------------------
@@ -779,7 +828,7 @@ elif page == "Customers":
                 "Name": st.column_config.TextColumn(),
                 "Email": st.column_config.TextColumn(),
             },
-            key="customers_editor_v17"
+            key="customers_editor_v18"
         )
 
         if st.button("💾 Wijzigingen opslaan (Customers)"):
@@ -926,6 +975,11 @@ elif page == "Products":
         prod_view["4w Availability"] = pd.to_numeric(prod_view["4w Availability"], errors="coerce").fillna(0).astype(int)
         for _c in ["Name","Description","Supplier"]:
             prod_view[_c] = prod_view[_c].astype("string").fillna("")
+        prod_view["Price"] = (
+            pd.to_numeric(prod_view["Price"], errors="coerce")
+              .apply(lambda v: "" if pd.isna(v) else f"{float(v):.2f}".replace(".", ","))
+              .astype("string")
+        )
 
         st.subheader("✏️ Bewerken & Verwijderen")
         edited = st.data_editor(
@@ -938,12 +992,11 @@ elif page == "Products":
                 "ID": st.column_config.NumberColumn(disabled=True),
                 "Name": st.column_config.TextColumn(),
                 "Description": st.column_config.TextColumn(),
-                # Numeriek => sorteerbaar & editable
-                "Price": st.column_config.NumberColumn(format="%.2f", min_value=0.0, step=0.01),
+                "Price": st.column_config.TextColumn(help="Gebruik 12,34 of 12.34"),
                 "4w Availability": st.column_config.NumberColumn(format="%d", min_value=0, step=1),
                 "Supplier": st.column_config.TextColumn(),
             },
-            key="product_editor_v17",
+            key="product_editor_v18",
         )
 
         c1, c2 = st.columns(2)
@@ -954,7 +1007,9 @@ elif page == "Products":
                         "ID":"id","Name":"name","Description":"description","Price":"price",
                         "4w Availability":"four_week_availability","Supplier":"supplier"
                     })
-                    # Price is numeriek, dus geen extra parsing nodig
+                    if "price" in to_save.columns:
+                        to_save["price"] = to_save["price"].astype(str).str.replace(",", ".", regex=False)
+                        to_save["price"] = pd.to_numeric(to_save["price"], errors="coerce")
                     to_save = coerce_columns(to_save, {
                         "id":"int","name":"str","description":"str","price":"float",
                         "four_week_availability":"int","supplier":"str"
@@ -979,7 +1034,7 @@ elif page == "Products":
                     st.success(f"Verwijderd: {del_ids}")
                     st.rerun()
 
-    # ===== Reparatie / import-check (alleen op deze pagina) =====
+    # ===== Reparatie / import-check (alleen hier zichtbaar) =====
     with st.expander("🛠️ Reparatie / import-check voor products.csv (GitHub)"):
         st.info("Hier kun je het productbestand controleren of repareren als import mislukt is.")
         st.markdown("*(Alleen zichtbaar op de Products-pagina)*")
