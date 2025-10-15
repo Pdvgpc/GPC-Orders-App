@@ -154,7 +154,7 @@ def login_panel():
 
 
 # ------------------------------------------------------------
-# [Start] Helpers: types, load/save, id's, date helpers
+# [Start] Helpers
 # ------------------------------------------------------------
 def week_start_date(year: int, week: int):
     try:
@@ -201,7 +201,7 @@ def load_data():
     st.session_state.products = prod
 
     # CUSTOMERS
-    g = _gh_get_csv(f"{repo_dir}/customers.csv")
+    g = _gh_get_csv(f"{repo_dir}/customers.csv}")
     if g is None:
         cust = pd.DataFrame(columns=["id","name","email"])
     else:
@@ -402,10 +402,10 @@ def build_orders_display_df() -> pd.DataFrame:
     orders["_PID"] = pd.to_numeric(orders["product_id"], errors="coerce").astype("Int64")
 
     view_cols = ["Customer","Article","Description","Amount","Price","Sales Price","Supplier",
-                 "Weeknumber","Date of Weeknumber","Year","_OID","_CID","_PID"]
+                 "Weeknumber","Date of Weeknumber","Year","_OID"]
     df = orders.reindex(columns=view_cols).copy()
 
-    # String cleanups (minder duplicaten door spaties/NaN)
+    # Strings opschonen (trim) → minder dubbele rijen in export
     for c in ["Customer","Article","Description","Supplier"]:
         df[c] = df[c].astype("string").fillna("").str.strip()
 
@@ -450,11 +450,10 @@ def make_pivot_amount(df: pd.DataFrame, row_fields: list) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame(columns=row_fields)
     tmp = df.copy()
-    # schoon stringvelden om dubbele rijen door spaties te voorkomen
+    # schoon strings → minder dubbele regels
     for c in row_fields:
         tmp[c] = tmp[c].astype("string").fillna("").str.strip()
-
-    # verwijder lege records (zonder klant of artikel)
+    # verwijder lege Customer/Article voor nettere export
     if "Customer" in row_fields:
         tmp = tmp[tmp["Customer"] != ""]
     if "Article" in row_fields:
@@ -559,10 +558,7 @@ elif page == "Orders":
                 # onthoud laatste klant
                 last_cid = st.session_state.get("last_customer_id", None)
                 cust_options = [None] + cust_ids
-                if last_cid in cust_ids:
-                    cust_index = cust_options.index(last_cid)
-                else:
-                    cust_index = 0
+                cust_index = cust_options.index(last_cid) if (last_cid in cust_ids) else 0
 
                 sel_customer = st.selectbox(
                     "Customer *",
@@ -665,19 +661,15 @@ elif page == "Orders":
     if flt_article:  filtered_df = filtered_df[filtered_df["Article"].isin(flt_article)]
     if flt_weeks:    filtered_df = filtered_df[filtered_df["Weeknumber"].isin(flt_weeks)]
 
-    # ----- Tabel bewerken (één tabel, klik op headers om te sorteren) -----
+    # ----- Tabel bewerken (één tabel, header-click sorting) -----
     if filtered_df.empty:
         st.info("Geen orders gevonden (controleer je filters).")
     else:
-        show_cols = ["Customer","Article","Description","Amount","Price","Sales Price","Supplier",
-                     "Weeknumber","Date of Weeknumber","Year"]
-        display_df = filtered_df[show_cols + ["_OID"]].copy()
+        show_cols = ["Customer","Article","Description","Amount","Price","Sales Price",
+                     "Supplier","Weeknumber","Date of Weeknumber","Year","_OID"]
+        editor_df = filtered_df[show_cols].copy()
 
-        # prepare editor zonder index-truc -> header-sorting blijft aan
-        editor_df = display_df.copy()
-        editor_df.insert(0, "Select", False)
-
-        # kolom types
+        # types & 2-dec string weergave voor Sales Price (zodat 0,75 kan)
         for c in ["Customer","Article","Description","Supplier"]:
             editor_df[c] = editor_df[c].astype("string")
         editor_df["Date of Weeknumber"] = editor_df["Date of Weeknumber"].astype(str)
@@ -688,11 +680,11 @@ elif page == "Orders":
         )
 
         st.subheader("📋 Orders (bewerken, selecteren en verwijderen)")
+        # één editor, sorting op kolomtitels blijft aan
         edited = st.data_editor(
-            editor_df,
+            editor_df.assign(**{"Select": False})[["Select"] + show_cols],
             use_container_width=True,
-            hide_index=True,                 # geen index kolom in beeld
-            num_rows="dynamic",
+            hide_index=True,
             column_config={
                 "Select": st.column_config.CheckboxColumn(help="Selecteer voor verwijderen"),
                 "_OID": st.column_config.NumberColumn(label="_OID", help="Interne id", disabled=True, width="small"),
@@ -707,10 +699,9 @@ elif page == "Orders":
                 "Article": st.column_config.TextColumn(disabled=True),
                 "Description": st.column_config.TextColumn(disabled=True),
             },
-            key="orders_editor_v18",         # nieuw key zodat Streamlit de nieuwe config oppakt
+            key="orders_editor_v19",
         )
 
-        # selectie
         selected_ids = edited.loc[edited["Select"] == True, "_OID"].dropna().astype(int).tolist()
 
         c1, c2, _ = st.columns([1,1,6])
@@ -750,12 +741,12 @@ elif page == "Orders":
         # ----- Export -----
         st.markdown("### ⬇️ Export Excel (pivot per week)")
 
-        # BELANGRIJK: Customer-pivot zonder 'Sales Price' in de rij-sleutel
-        cust_rows = ["Customer","Article","Description","Supplier"]
+        # Customer-export: géén Supplier, géén Sales Price → voorkomt “zelfde artikel bij andere leverancier”
+        cust_rows = ["Customer","Article","Description"]
         cust_pivot = make_pivot_amount(filtered_df[cust_rows + ["Weeknumber","Amount"]], cust_rows)
 
-        # Supplier-pivot (ongewijzigd)
-        sup_rows  = ["Supplier","Article","Description","Customer"]
+        # Supplier-export: groepeer alleen per Supplier/Article/Description
+        sup_rows  = ["Supplier","Article","Description"]
         sup_pivot = make_pivot_amount(filtered_df[sup_rows + ["Weeknumber","Amount"]], sup_rows)
 
         cust_disabled = cust_pivot.empty; sup_disabled = sup_pivot.empty
@@ -809,14 +800,14 @@ elif page == "Customers":
         view.insert(0, "Select", False)
         st.subheader("✏️ Bewerken & Verwijderen")
         edited = st.data_editor(
-            view, use_container_width=True, hide_index=True, num_rows="dynamic",
+            view, use_container_width=True, hide_index=True,
             column_config={
                 "Select": st.column_config.CheckboxColumn(),
                 "ID": st.column_config.NumberColumn(disabled=True),
                 "Name": st.column_config.TextColumn(),
                 "Email": st.column_config.TextColumn(),
             },
-            key="customers_editor_v17"
+            key="customers_editor_v19"
         )
 
         if st.button("💾 Wijzigingen opslaan (Customers)"):
@@ -974,7 +965,6 @@ elif page == "Products":
             prod_view,
             use_container_width=True,
             hide_index=True,
-            num_rows="dynamic",
             column_config={
                 "Select": st.column_config.CheckboxColumn(),
                 "ID": st.column_config.NumberColumn(disabled=True),
@@ -984,7 +974,7 @@ elif page == "Products":
                 "4w Availability": st.column_config.NumberColumn(format="%d", min_value=0, step=1),
                 "Supplier": st.column_config.TextColumn(),
             },
-            key="product_editor_v17",
+            key="product_editor_v19",
         )
 
         c1, c2 = st.columns(2)
