@@ -201,7 +201,7 @@ def load_data():
     st.session_state.products = prod
 
     # CUSTOMERS
-    g = _gh_get_csv(f"{repo_dir}/customers.csv}")
+    g = _gh_get_csv(f"{repo_dir}/customers.csv")
     if g is None:
         cust = pd.DataFrame(columns=["id","name","email"])
     else:
@@ -1007,3 +1007,4 @@ elif page == "Products":
 # ------------------------------------------------------------
 # [End] Products
 # ------------------------------------------------------------
+
