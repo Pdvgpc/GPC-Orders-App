@@ -16,9 +16,6 @@ from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
 import streamlit.components.v1 as components
 
-# NEW: AgGrid voor sorteren op kolomtitels + inline edit
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
-
 # Gebruik st.secrets via een dict
 SEC = dict(st.secrets)
 
@@ -204,7 +201,7 @@ def load_data():
     st.session_state.products = prod
 
     # CUSTOMERS
-    g = _gh_get_csv(f"{repo_dir}/customers.csv")
+    g = _gh_get_csv(f"{repo_dir}/customers.csv}")
     if g is None:
         cust = pd.DataFrame(columns=["id","name","email"])
     else:
@@ -258,22 +255,6 @@ def next_id(df: pd.DataFrame) -> int:
         return int(pd.to_numeric(df["id"], errors="coerce").fillna(0).max()) + 1
     except Exception:
         return 1
-
-def label_product_with_supplier(prod_id: Optional[int]) -> str:
-    """Label voor selectbox: 'Product — Supplier'."""
-    try:
-        if prod_id is None:
-            return ""
-        pid = int(prod_id)
-        df = st.session_state.products
-        row = df.loc[pd.to_numeric(df["id"], errors="coerce") == pid]
-        if row.empty:
-            return ""
-        name = str(row.iloc[0]["name"] or "")
-        supplier = str(row.iloc[0]["supplier"] or "")
-        return f"{name} — {supplier}" if supplier else name
-    except Exception:
-        return ""
 
 def fmt_select_from_df(id_value, df_id_name: pd.DataFrame) -> str:
     try:
@@ -448,20 +429,57 @@ def _excel_export_bytes(df: pd.DataFrame, title: str) -> BytesIO:
     buf = BytesIO(); wb.save(buf); buf.seek(0); return buf
 
 def make_pivot_amount(df: pd.DataFrame, row_fields: list) -> pd.DataFrame:
+    """
+    NIEUW: pivot zonder kunstmatige combinaties.
+    - Neemt alleen werkelijk voorkomende (row_fields + Weeknumber) combinaties mee
+      met Amount > 0.
+    - Verwijdert volledig lege rijen/kolommen.
+    """
     if df.empty:
         return pd.DataFrame(columns=row_fields)
+
     tmp = df.copy()
+
+    # Normaliseer types
     tmp["Weeknumber"] = pd.to_numeric(tmp["Weeknumber"], errors="coerce").astype("Int64")
     tmp["Amount"]     = pd.to_numeric(tmp["Amount"], errors="coerce").fillna(0).astype(int)
-    pvt = tmp.pivot_table(index=row_fields, columns="Weeknumber", values="Amount", aggfunc="sum", dropna=False)
-    if isinstance(pvt.columns, pd.MultiIndex):
-        pvt.columns = [c[-1] for c in pvt.columns]
-    pvt = pvt.reindex(sorted(pvt.columns.dropna()), axis=1)
-    pvt = pvt.astype("float").where(pd.notna(pvt), None)
-    pvt.columns = [f"W{int(c)}" for c in pvt.columns.tolist()]
+
+    # Strip en naar string (voorkom 'NaN' als aparte categorie)
+    for c in row_fields:
+        tmp[c] = tmp[c].astype("string").fillna("").str.strip()
+
+    # Alleen echte regels met hoeveelheid > 0 meenemen
+    tmp = tmp[(tmp["Amount"] > 0) & tmp["Weeknumber"].notna()]
+    if tmp.empty:
+        # Geen echte data -> lege tabel met alleen row_fields
+        return pd.DataFrame(columns=row_fields)
+
+    # GROEPEREN op werkelijk voorkomende combinaties
+    agg = (
+        tmp.groupby(row_fields + ["Weeknumber"], dropna=False, as_index=False)["Amount"]
+           .sum()
+    )
+
+    # Pivotten zonder lege combinaties
+    pvt = agg.pivot(index=row_fields, columns="Weeknumber", values="Amount")
+
+    # Sorteer week-kolommen oplopend en verwijder volledig lege kolommen/rijen
+    if not pvt.empty:
+        pvt = pvt.reindex(sorted([c for c in pvt.columns if pd.notna(c)]), axis=1)
+        pvt = pvt.dropna(axis=1, how="all")
+        pvt = pvt.dropna(axis=0, how="all")
+
+    # Excel-vriendelijk: getallen als float, kolomnamen als Wxx
+    if not pvt.empty:
+        pvt = pvt.astype(float)
+        pvt.columns = [f"W{int(c)}" for c in pvt.columns]
+
     pvt = pvt.reset_index()
+
+    # Strings netjes
     for c in row_fields:
         pvt[c] = pvt[c].astype("string").fillna("")
+
     return pvt
 # ------------------------------------------------------------
 # [End] Helpers: Orders weergave + Excel export (pivot)
@@ -540,26 +558,16 @@ elif page == "Orders":
                 cust_ids = st.session_state.customers["id"].dropna().astype(int).tolist()
                 prod_ids = st.session_state.products["id"].dropna().astype(int).tolist()
 
-                # Laatste gekozen customer onthouden + defaulten
-                last_cust = st.session_state.get("last_customer_id")
-                cust_options = [None] + cust_ids
-                if last_cust in cust_ids:
-                    cust_index = cust_options.index(last_cust)
-                else:
-                    cust_index = 0
-
                 sel_customer = st.selectbox(
                     "Customer *",
-                    options=cust_options,
+                    options=[None] + cust_ids,
                     format_func=lambda i: "" if i is None else fmt_select_from_df(i, st.session_state.customers),
-                    index=cust_index,
+                    index=0,
                 )
-
-                # Product label = "name — supplier" (typeahead + pijltjes + enter werken standaard)
                 sel_product = st.selectbox(
                     "Article (Product) *",
                     options=[None] + prod_ids,
-                    format_func=lambda i: "" if i is None else label_product_with_supplier(i),
+                    format_func=lambda i: "" if i is None else fmt_select_from_df(i, st.session_state.products),
                     index=0,
                 )
                 amount = st.number_input("Amount *", min_value=1, step=1, value=1)
@@ -617,8 +625,6 @@ elif page == "Orders":
                     st.session_state.orders = pd.concat(
                         [st.session_state.orders, pd.DataFrame(rows)], ignore_index=True
                     )
-                    # Onthoud laatst gekozen customer
-                    st.session_state["last_customer_id"] = int(sel_customer)
                     save_data()
                     st.success(f"Toegevoegd: {len(rows)} order(s) voor weken: {', '.join(map(str, weeks))}")
                     st.rerun()
@@ -647,7 +653,7 @@ elif page == "Orders":
     if flt_article:  filtered_df = filtered_df[filtered_df["Article"].isin(flt_article)]
     if flt_weeks:    filtered_df = filtered_df[filtered_df["Weeknumber"].isin(flt_weeks)]
 
-    # ----- Tabel bewerken (AgGrid: sorteer op header-klik, filter, inline edit) -----
+    # ----- Tabel bewerken -----
     if filtered_df.empty:
         st.info("Geen orders gevonden (controleer je filters).")
     else:
@@ -656,10 +662,12 @@ elif page == "Orders":
         display_df = filtered_df[show_cols + ["_OID"]].copy()
 
         editor_df = display_df.copy()
-        editor_df.set_index("_OID", inplace=False)
+        editor_df.insert(0, "Select", False)
+        editor_df.set_index("_OID", inplace=True)
         for c in ["Customer","Article","Description","Supplier"]:
             editor_df[c] = editor_df[c].astype("string")
         editor_df["Date of Weeknumber"] = editor_df["Date of Weeknumber"].astype(str)
+
         # Sales Price als string (0,75)
         editor_df["Sales Price"] = (
             editor_df["Sales Price"]
@@ -668,87 +676,59 @@ elif page == "Orders":
         )
 
         st.subheader("📋 Orders (bewerken, selecteren en verwijderen)")
-
-        grid_df = editor_df.copy().reset_index()
-        grid_df = grid_df.rename(columns={"_OID": "_OID_keep"})
-
-        gob = GridOptionsBuilder.from_dataframe(grid_df)
-
-        editable_cols = {"Amount": True, "Weeknumber": True, "Year": True, "Sales Price": True}
-        for col in grid_df.columns:
-            if col in ["Customer","Article","Description","Supplier","Price","Date of Weeknumber","_OID_keep"]:
-                gob.configure_column(col, editable=False)
-            else:
-                gob.configure_column(col, editable=editable_cols.get(col, False))
-
-        gob.configure_grid_options(
-            enableSorting=True,
-            enableFilter=True,
-            rowSelection="multiple",
-            suppressRowClickSelection=False,
-        )
-        first_col = grid_df.columns[0]
-        gob.configure_column(first_col, headerCheckboxSelection=True, headerCheckboxSelectionFilteredOnly=True, checkboxSelection=True)
-        for c in grid_df.columns:
-            gob.configure_column(c, resizable=True, autoSize=True)
-        grid_options = gob.build()
-
-        grid_ret = AgGrid(
-            grid_df,
-            gridOptions=grid_options,
-            update_mode=GridUpdateMode.MODEL_CHANGED,
-            data_return_mode="AS_INPUT",
-            fit_columns_on_grid_load=True,
-            enable_enterprise_modules=False,
-            height=420,
+        edited = st.data_editor(
+            editor_df,
+            use_container_width=True,
+            num_rows="dynamic",
+            column_config={
+                "Select": st.column_config.CheckboxColumn(help="Selecteer voor verwijderen"),
+                "Amount": st.column_config.NumberColumn(format="%d", min_value=0),
+                "Weeknumber": st.column_config.NumberColumn(format="%d", min_value=1, max_value=53),
+                "Year": st.column_config.NumberColumn(format="%d", min_value=2020, max_value=2100),
+                "Sales Price": st.column_config.TextColumn(help="Gebruik 12,34 of 12.34"),
+                "Price": st.column_config.NumberColumn(format="%.2f", min_value=0.0, step=0.01, disabled=True),
+                "Date of Weeknumber": st.column_config.TextColumn(disabled=True),
+                "Supplier": st.column_config.TextColumn(disabled=True),
+                "Customer": st.column_config.TextColumn(disabled=True),
+                "Article": st.column_config.TextColumn(disabled=True),
+                "Description": st.column_config.TextColumn(disabled=True),
+            },
+            hide_index=False,
+            disabled=["Customer","Article","Description","Supplier","Date of Weeknumber","Price"],
+            key="orders_editor_v17",
         )
 
-        grid_data = pd.DataFrame(grid_ret["data"])
-        sel_rows = grid_ret.get("selected_rows", []) or []
-        selected_ids = [int(r["_OID_keep"]) for r in sel_rows if "_OID_keep" in r and pd.notna(r["_OID_keep"])]
-
+        selected_ids = edited.index[edited["Select"] == True].tolist()
         c1, c2, _ = st.columns([1,1,6])
 
         with c1:
             if st.button("🗑️ Verwijder geselecteerde orders", use_container_width=True):
                 if not selected_ids:
-                    st.warning("Selecteer eerst één of meer orders (via checkboxes).")
+                    st.warning("Selecteer eerst één of meer orders.")
                 else:
                     st.session_state.orders = st.session_state.orders[~st.session_state.orders["id"].isin(selected_ids)]
-                    save_data()
-                    st.success(f"Verwijderd: {selected_ids}")
-                    st.rerun()
+                    save_data(); st.success(f"Verwijderd: {selected_ids}"); st.rerun()
 
         with c2:
             if st.button("💾 Opslaan wijzigingen", use_container_width=True):
                 base = st.session_state.orders.set_index("id")
-                for _, row in grid_data.iterrows():
-                    oid = row.get("_OID_keep")
-                    if pd.isna(oid):
-                        continue
-                    oid = int(oid)
-                    if oid in base.index:
+                for _oid, row in edited.iterrows():
+                    if _oid in base.index:
                         if pd.notna(row.get("Amount")):
-                            base.at[oid, "quantity"] = int(row["Amount"])
+                            base.at[_oid, "quantity"] = int(row["Amount"])
                         if pd.notna(row.get("Weeknumber")):
-                            base.at[oid, "week_number"] = int(row["Weeknumber"])
+                            base.at[_oid, "week_number"] = int(row["Weeknumber"])
                         if pd.notna(row.get("Year")):
-                            base.at[oid, "year"] = int(row["Year"])
+                            base.at[_oid, "year"] = int(row["Year"])
                         sp = row.get("Sales Price")
-                        if isinstance(sp, str):
-                            sp = sp.strip().replace(",", ".")
-                        if sp == "":
-                            sp = None
-                        if sp is not None:
+                        if pd.notna(sp) and sp != "":
                             try:
-                                base.at[oid, "sales_price"] = round(float(sp), 2)
+                                sp_norm = float(sp.replace(",", ".")) if isinstance(sp, str) else float(sp)
+                                base.at[_oid, "sales_price"] = round(sp_norm, 2)
                             except Exception:
                                 pass
-
                 st.session_state.orders = base.reset_index()
-                save_data()
-                st.success("Wijzigingen opgeslagen.")
-                st.rerun()
+                save_data(); st.success("Wijzigingen opgeslagen."); st.rerun()
 
         # ----- Export -----
         st.markdown("### ⬇️ Export Excel (pivot per week)")
