@@ -16,7 +16,7 @@ from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
 import streamlit.components.v1 as components
 
-# AgGrid: sorteren op kolomtitels + inline bewerken zoals jij het wil
+# AgGrid: sorteren op kolomtitels + inline bewerken
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 # Gebruik st.secrets via een dict
@@ -380,8 +380,8 @@ def build_orders_display_df() -> pd.DataFrame:
 
     if orders.empty:
         return pd.DataFrame(columns=[
-            "Klant","Artikel","Omschrijving","Aantal","Inkoopprijs","Verkoopprijs","Leverancier",
-            "Week","Datum (maandag)","Jaar","_OID","_CID","_PID"
+            "Customer","Article","Description","Quantity","Purchase Price","Sales Price","Supplier",
+            "Week","Week Start (Mon)","Year","_OID","_CID","_PID"
         ])
 
     # Join producten
@@ -405,31 +405,31 @@ def build_orders_display_df() -> pd.DataFrame:
             cust[["_CID_join","name"]],
             left_on="customer_id", right_on="_CID_join", how="left", suffixes=("","_cust")
         )
-        orders["Klant"] = orders["name_cust"].fillna("")
+        orders["Customer"] = orders["name_cust"].fillna("")
     else:
         orders["_CID_join"] = None
-        orders["Klant"] = ""
+        orders["Customer"] = ""
 
     # Mapping en types
-    orders["Artikel"]      = orders["name"].fillna("")
-    orders["Omschrijving"] = orders["description"].fillna("")
-    orders["Aantal"]       = pd.to_numeric(orders["quantity"], errors="coerce").fillna(0).astype(int)
-    orders["Inkoopprijs"]  = pd.to_numeric(orders["price"], errors="coerce")
-    orders["Verkoopprijs"] = pd.to_numeric(orders["sales_price"], errors="coerce")
-    orders["Leverancier"]  = orders["supplier"].astype("string").fillna("")
-    orders["Week"]         = pd.to_numeric(orders["week_number"], errors="coerce").fillna(0).astype(int)
-    orders["Jaar"]         = pd.to_numeric(orders["year"], errors="coerce").fillna(0).astype(int)
-    orders["Datum (maandag)"] = orders.apply(lambda r: week_start_date(r["Jaar"], r["Week"]), axis=1)
+    orders["Article"]        = orders["name"].fillna("")
+    orders["Description"]    = orders["description"].fillna("")
+    orders["Quantity"]       = pd.to_numeric(orders["quantity"], errors="coerce").fillna(0).astype(int)
+    orders["Purchase Price"] = pd.to_numeric(orders["price"], errors="coerce")
+    orders["Sales Price"]    = pd.to_numeric(orders["sales_price"], errors="coerce")
+    orders["Supplier"]       = orders["supplier"].astype("string").fillna("")
+    orders["Week"]           = pd.to_numeric(orders["week_number"], errors="coerce").fillna(0).astype(int)
+    orders["Year"]           = pd.to_numeric(orders["year"], errors="coerce").fillna(0).astype(int)
+    orders["Week Start (Mon)"] = orders.apply(lambda r: week_start_date(r["Year"], r["Week"]), axis=1)
 
     # Interne ID's
     orders["_OID"] = pd.to_numeric(orders["id"], errors="coerce").astype("Int64")
     orders["_CID"] = pd.to_numeric(orders["customer_id"], errors="coerce").astype("Int64")
     orders["_PID"] = pd.to_numeric(orders["product_id"], errors="coerce").astype("Int64")
 
-    view_cols = ["Klant","Artikel","Omschrijving","Aantal","Inkoopprijs","Verkoopprijs","Leverancier",
-                 "Week","Datum (maandag)","Jaar","_OID","_CID","_PID"]
+    view_cols = ["Customer","Article","Description","Quantity","Purchase Price","Sales Price","Supplier",
+                 "Week","Week Start (Mon)","Year","_OID","_CID","_PID"]
     df = orders.reindex(columns=view_cols).copy()
-    for c in ["Klant","Artikel","Omschrijving","Leverancier"]:
+    for c in ["Customer","Article","Description","Supplier"]:
         df[c] = df[c].astype("string").fillna("")
     return df
 
@@ -473,14 +473,14 @@ def _excel_export_bytes(df: pd.DataFrame, title: str) -> BytesIO:
     buf = BytesIO(); wb.save(buf); buf.seek(0); return buf
 
 def make_pivot_amount(df: pd.DataFrame, row_fields: list) -> pd.DataFrame:
-    """Pivot: som Aantal per Week. Verwijdert rijen zonder aantallen (alle weken leeg/0)."""
+    """Pivot: som Quantity per Week. Verwijdert rijen zonder aantallen."""
     if df.empty:
         return pd.DataFrame(columns=row_fields)
     tmp = df.copy()
-    tmp["Week"]   = pd.to_numeric(tmp["Week"], errors="coerce").astype("Int64")
-    tmp["Aantal"] = pd.to_numeric(tmp["Aantal"], errors="coerce").fillna(0).astype(int)
+    tmp["Week"]     = pd.to_numeric(tmp["Week"], errors="coerce").astype("Int64")
+    tmp["Quantity"] = pd.to_numeric(tmp["Quantity"], errors="coerce").fillna(0).astype(int)
 
-    pvt = tmp.pivot_table(index=row_fields, columns="Week", values="Aantal",
+    pvt = tmp.pivot_table(index=row_fields, columns="Week", values="Quantity",
                           aggfunc="sum", dropna=False)
 
     if isinstance(pvt.columns, pd.MultiIndex):
@@ -665,35 +665,35 @@ elif page == "Orders":
     with st.expander("🔎 Filters (tabel & export)"):
         f1, f2, f3, f4 = st.columns(4)
         with f1:
-            flt_customer = st.multiselect("Klant", options=sorted(base_df["Klant"].dropna().astype(str).unique().tolist()))
+            flt_customer = st.multiselect("Customer", options=sorted(base_df["Customer"].dropna().astype(str).unique().tolist()))
         with f2:
-            flt_supplier = st.multiselect("Leverancier", options=sorted(base_df["Leverancier"].dropna().astype(str).unique().tolist()))
+            flt_supplier = st.multiselect("Supplier", options=sorted(base_df["Supplier"].dropna().astype(str).unique().tolist()))
         with f3:
-            flt_article = st.multiselect("Artikel", options=sorted(base_df["Artikel"].dropna().astype(str).unique().tolist()))
+            flt_article = st.multiselect("Article", options=sorted(base_df["Article"].dropna().astype(str).unique().tolist()))
         with f4:
             unique_weeks = sorted(base_df["Week"].dropna().astype(int).unique().tolist())
             flt_weeks = st.multiselect("Week", options=unique_weeks)
 
     filtered_df = base_df.copy()
-    if flt_customer: filtered_df = filtered_df[filtered_df["Klant"].isin(flt_customer)]
-    if flt_supplier: filtered_df = filtered_df[filtered_df["Leverancier"].isin(flt_supplier)]
-    if flt_article:  filtered_df = filtered_df[filtered_df["Artikel"].isin(flt_article)]
+    if flt_customer: filtered_df = filtered_df[filtered_df["Customer"].isin(flt_customer)]
+    if flt_supplier: filtered_df = filtered_df[filtered_df["Supplier"].isin(flt_supplier)]
+    if flt_article:  filtered_df = filtered_df[filtered_df["Article"].isin(flt_article)]
     if flt_weeks:    filtered_df = filtered_df[filtered_df["Week"].isin(flt_weeks)]
 
     # ----- Tabel (AgGrid) – gedrag exact houden + fixes -----
     if filtered_df.empty:
         st.info("Geen orders gevonden (controleer je filters).")
     else:
-        show_cols = ["Klant","Artikel","Omschrijving","Aantal","Inkoopprijs","Verkoopprijs","Leverancier",
-                     "Week","Datum (maandag)","Jaar"]
+        show_cols = ["Customer","Article","Description","Quantity","Purchase Price","Sales Price","Supplier",
+                     "Week","Week Start (Mon)","Year"]
         display_df = filtered_df[show_cols + ["_OID"]].copy()
 
         editor_df = display_df.copy()
-        for c in ["Klant","Artikel","Omschrijving","Leverancier"]:
+        for c in ["Customer","Article","Description","Supplier"]:
             editor_df[c] = editor_df[c].astype("string")
-        editor_df["Datum (maandag)"] = editor_df["Datum (maandag)"].astype(str)
-        editor_df["Verkoopprijs"] = (
-            editor_df["Verkoopprijs"]
+        editor_df["Week Start (Mon)"] = editor_df["Week Start (Mon)"].astype(str)
+        editor_df["Sales Price"] = (
+            editor_df["Sales Price"]
             .apply(lambda v: "" if pd.isna(v) else f"{float(v):.2f}".replace(".", ","))
             .astype("string")
         )
@@ -707,9 +707,9 @@ elif page == "Orders":
         gob = GridOptionsBuilder.from_dataframe(grid_df)
 
         # Kolommen bewerkbaar zoals afgesproken
-        editable_cols = {"Aantal": True, "Week": True, "Jaar": True, "Verkoopprijs": True}
+        editable_cols = {"Quantity": True, "Week": True, "Year": True, "Sales Price": True}
         for col in grid_df.columns:
-            if col in ["Klant","Artikel","Omschrijving","Leverancier","Inkoopprijs","Datum (maandag)","_OID_keep"]:
+            if col in ["Customer","Article","Description","Supplier","Purchase Price","Week Start (Mon)","_OID_keep"]:
                 gob.configure_column(col, editable=False)
             else:
                 gob.configure_column(col, editable=editable_cols.get(col, False))
@@ -733,16 +733,13 @@ elif page == "Orders":
         # === Kolombreedtes onthouden via columnState ===
         COL_STATE_KEY = "orders_grid_column_state"
         if st.session_state.get(COL_STATE_KEY):
-            # Zet opgeslagen state terug (breedtes, volgorde, sorteringen/filters)
             grid_options["columnState"] = st.session_state[COL_STATE_KEY]
 
         # === Dynamische hoogte zodat laatste rij nooit half is ===
         n_rows = len(grid_df)
         row_h = grid_options.get("rowHeight", 34) or 34
         header_h = grid_options.get("headerHeight", 34) or 34
-        # marge voor horizontale scroll/footers
         padding = 10
-        # Max hoogte zodat pagina niet té lang wordt
         max_height = 700
         grid_height = min(max_height, header_h + padding + max(1, n_rows) * row_h)
 
@@ -751,13 +748,13 @@ elif page == "Orders":
             gridOptions=grid_options,
             update_mode=GridUpdateMode.MODEL_CHANGED,
             data_return_mode="AS_INPUT",
-            fit_columns_on_grid_load=False,   # important: laat gebruiker breedtes bepalen
+            fit_columns_on_grid_load=False,   # laat gebruiker breedtes bepalen
             enable_enterprise_modules=False,
             height=grid_height,
             allow_unsafe_jscode=True,
         )
 
-        # Sla columnState op (breedtes blijven behouden bij hertekenen)
+        # Sla columnState op (breedtes behouden bij hertekenen)
         try:
             gs = grid_ret.get("grid_state") or {}
             col_state = gs.get("columnState")
@@ -791,13 +788,13 @@ elif page == "Orders":
                         continue
                     oid = int(oid)
                     if oid in base.index:
-                        if pd.notna(row.get("Aantal")):
-                            base.at[oid, "quantity"] = int(row["Aantal"])
+                        if pd.notna(row.get("Quantity")):
+                            base.at[oid, "quantity"] = int(row["Quantity"])
                         if pd.notna(row.get("Week")):
                             base.at[oid, "week_number"] = int(row["Week"])
-                        if pd.notna(row.get("Jaar")):
-                            base.at[oid, "year"] = int(row["Jaar"])
-                        sp = row.get("Verkoopprijs")
+                        if pd.notna(row.get("Year")):
+                            base.at[oid, "year"] = int(row["Year"])
+                        sp = row.get("Sales Price")
                         if isinstance(sp, str):
                             sp = sp.strip().replace(",", ".")
                         if sp == "":
@@ -815,13 +812,20 @@ elif page == "Orders":
 
         # ----- Export -----
         st.markdown("### ⬇️ Export Excel (pivot per week)")
-        # Klant-export ongewijzigd
-        cust_rows = ["Klant","Artikel","Omschrijving","Verkoopprijs"]
-        # Leverancier-export: nu mét Klant
-        sup_rows  = ["Leverancier","Artikel","Omschrijving","Klant"]
+        # Customer export (Engels)
+        cust_rows = ["Customer","Article","Description","Sales Price"]
+        # Supplier export: nu mét Customer (Engels)
+        sup_rows  = ["Supplier","Article","Description","Customer"]
 
-        cust_pivot = make_pivot_amount(filtered_df[cust_rows + ["Week","Aantal"]], cust_rows)
-        sup_pivot  = make_pivot_amount(filtered_df[sup_rows  + ["Week","Aantal"]], sup_rows)
+        # Let op: make_pivot_amount verwacht kolommen 'Week' en 'Quantity'
+        # We geven filtered_df met Engelstalige kolommen door
+        cust_df = filtered_df.rename(columns={
+            "Aantal":"Quantity", "Week":"Week"
+        })
+        sup_df  = cust_df
+
+        cust_pivot = make_pivot_amount(cust_df[cust_rows + ["Week","Quantity"]], cust_rows)
+        sup_pivot  = make_pivot_amount(sup_df [sup_rows  + ["Week","Quantity"]], sup_rows)
 
         cust_disabled = cust_pivot.empty
         sup_disabled  = sup_pivot.empty
@@ -832,17 +836,17 @@ elif page == "Orders":
         e1, e2 = st.columns(2)
         with e1:
             st.download_button(
-                "⬇️ Export Excel (Klant)",
+                "⬇️ Export Excel (Customer)",
                 data=cust_file.getvalue() if cust_file else b"",
-                file_name=f"GPC_Orders_Klant_{datetime.now().year}.xlsx",
+                file_name=f"GPC_Orders_Customer_{datetime.now().year}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True, disabled=cust_disabled
             )
         with e2:
             st.download_button(
-                "⬇️ Export Excel (Leverancier + Klant)",
+                "⬇️ Export Excel (Supplier + Customer)",
                 data=sup_file.getvalue() if sup_file else b"",
-                file_name=f"GPC_Orders_Leverancier_{datetime.now().year}.xlsx",
+                file_name=f"GPC_Orders_Supplier_{datetime.now().year}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True, disabled=sup_disabled
             )
