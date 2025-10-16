@@ -293,7 +293,7 @@ def fmt_select_from_df(id_value, df_id_name: pd.DataFrame) -> str:
 # [Start] UI helper: Enter = volgende veld / submit
 # ------------------------------------------------------------
 def enable_enter_navigation(submit_button_label: str):
-    # Belangrijk: Enter NIET onderscheppen wanneer een selectbox open is (pijltjes + Enter blijven werken)
+    # Enter NIET onderscheppen wanneer een selectbox open is (pijltjes + Enter blijven werken)
     components.html(f"""
     <script>
     (function() {{
@@ -338,7 +338,6 @@ def enable_enter_navigation(submit_button_label: str):
       function handler(e) {{
         if (e.key !== 'Enter') return;
         const active = root.activeElement;
-        // Als select open is (of focus in select-zoekveld), laat Enter door
         if (isSelectOpenOrFocused(active)) return;
         if (isEditable(active)) {{
           e.preventDefault();
@@ -681,7 +680,7 @@ elif page == "Orders":
     if flt_article:  filtered_df = filtered_df[filtered_df["Artikel"].isin(flt_article)]
     if flt_weeks:    filtered_df = filtered_df[filtered_df["Week"].isin(flt_weeks)]
 
-    # ----- Tabel (AgGrid) – gedrag 1-op-1 zoals jouw versie, met dynamische hoogte FIX -----
+    # ----- Tabel (AgGrid) – gedrag exact houden + fixes -----
     if filtered_df.empty:
         st.info("Geen orders gevonden (controleer je filters).")
     else:
@@ -704,7 +703,10 @@ elif page == "Orders":
         grid_df = editor_df.copy()
         grid_df["_OID_keep"] = filtered_df["_OID"].values
 
+        # === AgGrid opties (met rowHeight + persistente column widths) ===
         gob = GridOptionsBuilder.from_dataframe(grid_df)
+
+        # Kolommen bewerkbaar zoals afgesproken
         editable_cols = {"Aantal": True, "Week": True, "Jaar": True, "Verkoopprijs": True}
         for col in grid_df.columns:
             if col in ["Klant","Artikel","Omschrijving","Leverancier","Inkoopprijs","Datum (maandag)","_OID_keep"]:
@@ -712,38 +714,57 @@ elif page == "Orders":
             else:
                 gob.configure_column(col, editable=editable_cols.get(col, False))
 
+        # Resizing/sort/filter + selectie
         gob.configure_grid_options(
             enableSorting=True,
             enableFilter=True,
             rowSelection="multiple",
             suppressRowClickSelection=False,
+            rowHeight=34,
+            headerHeight=34,
         )
-
-        # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-        # DYNAMISCHE HOOGTE FIX: vaste rijhoogte + totale hoogte berekend
-        ROW_HEIGHT = 36          # prettige rijhoogte
-        HEADER_HEIGHT = 56       # kophoogte
-        MAX_HEIGHT = 700         # begrenzen zodat grid niet te lang wordt
-        gob.configure_grid_options(rowHeight=ROW_HEIGHT)
-        # +2 rijen marge zodat de laatste rij nooit ‘halve’ rand heeft
-        grid_height = min(MAX_HEIGHT, HEADER_HEIGHT + ROW_HEIGHT * (len(grid_df) + 2))
-        # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-
         first_col = grid_df.columns[0]
         gob.configure_column(first_col, headerCheckboxSelection=True, headerCheckboxSelectionFilteredOnly=True, checkboxSelection=True)
         for c in grid_df.columns:
-            gob.configure_column(c, resizable=True, autoSize=True)
+            gob.configure_column(c, resizable=True)
+
         grid_options = gob.build()
+
+        # === Kolombreedtes onthouden via columnState ===
+        COL_STATE_KEY = "orders_grid_column_state"
+        if st.session_state.get(COL_STATE_KEY):
+            # Zet opgeslagen state terug (breedtes, volgorde, sorteringen/filters)
+            grid_options["columnState"] = st.session_state[COL_STATE_KEY]
+
+        # === Dynamische hoogte zodat laatste rij nooit half is ===
+        n_rows = len(grid_df)
+        row_h = grid_options.get("rowHeight", 34) or 34
+        header_h = grid_options.get("headerHeight", 34) or 34
+        # marge voor horizontale scroll/footers
+        padding = 10
+        # Max hoogte zodat pagina niet té lang wordt
+        max_height = 700
+        grid_height = min(max_height, header_h + padding + max(1, n_rows) * row_h)
 
         grid_ret = AgGrid(
             grid_df,
             gridOptions=grid_options,
             update_mode=GridUpdateMode.MODEL_CHANGED,
             data_return_mode="AS_INPUT",
-            fit_columns_on_grid_load=True,
+            fit_columns_on_grid_load=False,   # important: laat gebruiker breedtes bepalen
             enable_enterprise_modules=False,
-            height=grid_height,  # <-- dynamisch i.p.v. 420
+            height=grid_height,
+            allow_unsafe_jscode=True,
         )
+
+        # Sla columnState op (breedtes blijven behouden bij hertekenen)
+        try:
+            gs = grid_ret.get("grid_state") or {}
+            col_state = gs.get("columnState")
+            if col_state:
+                st.session_state[COL_STATE_KEY] = col_state
+        except Exception:
+            pass
 
         grid_data = pd.DataFrame(grid_ret["data"])
         sel_rows = grid_ret.get("selected_rows", []) or []
@@ -794,9 +815,10 @@ elif page == "Orders":
 
         # ----- Export -----
         st.markdown("### ⬇️ Export Excel (pivot per week)")
-        # Belangrijk: géén combinaties meer die je niet hebt ingevoerd
-        cust_rows = ["Klant","Artikel","Omschrijving","Verkoopprijs"]  # Leverancier eruit
-        sup_rows  = ["Leverancier","Artikel","Omschrijving"]           # Klant eruit
+        # Klant-export ongewijzigd
+        cust_rows = ["Klant","Artikel","Omschrijving","Verkoopprijs"]
+        # Leverancier-export: nu mét Klant
+        sup_rows  = ["Leverancier","Artikel","Omschrijving","Klant"]
 
         cust_pivot = make_pivot_amount(filtered_df[cust_rows + ["Week","Aantal"]], cust_rows)
         sup_pivot  = make_pivot_amount(filtered_df[sup_rows  + ["Week","Aantal"]], sup_rows)
@@ -818,7 +840,7 @@ elif page == "Orders":
             )
         with e2:
             st.download_button(
-                "⬇️ Export Excel (Leverancier)",
+                "⬇️ Export Excel (Leverancier + Klant)",
                 data=sup_file.getvalue() if sup_file else b"",
                 file_name=f"GPC_Orders_Leverancier_{datetime.now().year}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
