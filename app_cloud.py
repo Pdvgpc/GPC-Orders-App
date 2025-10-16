@@ -681,7 +681,7 @@ elif page == "Orders":
     if flt_article:  filtered_df = filtered_df[filtered_df["Artikel"].isin(flt_article)]
     if flt_weeks:    filtered_df = filtered_df[filtered_df["Week"].isin(flt_weeks)]
 
-    # ----- Tabel (AgGrid) – NIETS wijzigen aan gedrag zoals afgesproken -----
+    # ----- Tabel (AgGrid) – gedrag 1-op-1 zoals jouw versie, met dynamische hoogte FIX -----
     if filtered_df.empty:
         st.info("Geen orders gevonden (controleer je filters).")
     else:
@@ -718,6 +718,17 @@ elif page == "Orders":
             rowSelection="multiple",
             suppressRowClickSelection=False,
         )
+
+        # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        # DYNAMISCHE HOOGTE FIX: vaste rijhoogte + totale hoogte berekend
+        ROW_HEIGHT = 36          # prettige rijhoogte
+        HEADER_HEIGHT = 56       # kophoogte
+        MAX_HEIGHT = 700         # begrenzen zodat grid niet te lang wordt
+        gob.configure_grid_options(rowHeight=ROW_HEIGHT)
+        # +2 rijen marge zodat de laatste rij nooit ‘halve’ rand heeft
+        grid_height = min(MAX_HEIGHT, HEADER_HEIGHT + ROW_HEIGHT * (len(grid_df) + 2))
+        # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
         first_col = grid_df.columns[0]
         gob.configure_column(first_col, headerCheckboxSelection=True, headerCheckboxSelectionFilteredOnly=True, checkboxSelection=True)
         for c in grid_df.columns:
@@ -731,7 +742,7 @@ elif page == "Orders":
             data_return_mode="AS_INPUT",
             fit_columns_on_grid_load=True,
             enable_enterprise_modules=False,
-            height=420,
+            height=grid_height,  # <-- dynamisch i.p.v. 420
         )
 
         grid_data = pd.DataFrame(grid_ret["data"])
