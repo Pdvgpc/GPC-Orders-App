@@ -19,8 +19,34 @@ import streamlit.components.v1 as components
 # AgGrid: sorteren op kolomtitels + inline bewerken
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
-# Gebruik st.secrets via een dict
-SEC = dict(st.secrets)
+# Gebruik st.secrets via een dict (fallback naar ENV)
+def _merge_secrets_and_env():
+    s = {}
+    try:
+        s = dict(st.secrets)  # werkt als .streamlit/secrets.toml aanwezig is
+    except Exception:
+        s = {}
+    def pick(key, default=None):
+        v = s.get(key) if isinstance(s, dict) else None
+        if v is None or str(v).strip() in ("", "None"):
+            v = os.getenv(key, default)
+        return v
+    return {
+        "GITHUB_TOKEN": pick("GITHUB_TOKEN"),
+        "GITHUB_OWNER": pick("GITHUB_OWNER"),
+        "GITHUB_REPO":  pick("GITHUB_REPO"),
+        "DATA_DIR":     pick("DATA_DIR", "data"),
+    }
+
+SEC = _merge_secrets_and_env()
+
+_missing = [k for k, v in SEC.items() if not v]
+if _missing:
+    st.error(
+        "Ontbrekende instellingen: " + ", ".join(_missing) +
+        ". Zet ze als omgevingsvariabelen (export GITHUB_TOKEN=… enz.) of in .streamlit/secrets.toml."
+    )
+    st.stop()
 
 # ------------------------------------------------------------
 # [Start] App Config
@@ -994,7 +1020,7 @@ elif page == "Producten":
                             "Inkoopprijs (€)", value=float(row["price"] or 0.0),
                             key=f"safep_price_{sel_id}", help="Gebruik 12,34 of 12.34"
                         )
-                        new_desc = st.text_area("Omschrijving", value=row["description"] or "")
+                        new_desc = st.text_area("Omschrijving", value=row["description"] of "")
                     submit_safe = st.form_submit_button("💾 Opslaan (veilige modus)")
 
                 if submit_safe:
