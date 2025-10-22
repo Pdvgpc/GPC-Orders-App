@@ -891,13 +891,13 @@ for r in sel_rows:
         cust_file = _excel_export_bytes(cust_pivot, f"GPC Orders {datetime.now().year}") if not cust_disabled else None
         sup_file  = _excel_export_bytes(sup_pivot,  f"GPC Orders {datetime.now().year}") if not sup_disabled else None
 
-        e1, e2 = st.columns(2)
+        ee1, e2 = st.columns(2)
         with e1:
             st.download_button(
                 "⬇️ Export Excel (Customer)",
                 data=cust_file.getvalue() if cust_file else b"",
                 file_name=f"GPC_Orders_Customer_{datetime.now().year}.xlsx",
-                mime="application/vnd.openxmlformats-orficedocument.spreadsheetml.sheet",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True, disabled=cust_disabled
             )
         with e2:
@@ -905,7 +905,7 @@ for r in sel_rows:
                 "⬇️ Export Excel (Supplier + Customer)",
                 data=sup_file.getvalue() if sup_file else b"",
                 file_name=f"GPC_Orders_Supplier_{datetime.now().year}.xlsx",
-                mime="application/vnd.openxmlformats-orficedocument.spreadsheetml.sheet",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True, disabled=sup_disabled
             )
 # ------------------------------------------------------------
@@ -1162,5 +1162,6 @@ elif page == "Producten":
 # ------------------------------------------------------------
 # [Einde] Producten
 # ------------------------------------------------------------
+
 
 
