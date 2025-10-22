@@ -44,7 +44,7 @@ _missing = [k for k, v in SEC.items() if not v]
 if _missing:
     st.error(
         "Ontbrekende instellingen: " + ", ".join(_missing) +
-        ". Zet ze als omgevingsvariabelen (export GITHUB_TOKEN=… enz.) of in .streamlit/secrets.toml."
+        ". Zet ze als omgevingsvariabelen (export GITHUB_TOKEN=… enz.) or in .streamlit/secrets.toml."
     )
     st.stop()
 
@@ -133,7 +133,7 @@ def load_auth() -> dict:
         with open(AUTH_YAML, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     except Exception:
-        st.error("auth.yaml niet gevonden of ongeldig. Voeg auth.yaml toe aan de repo.")
+        st.error("auth.yaml niet gevonden or ongeldig. Voeg auth.yaml toe aan de repo.")
         return {}
 
 def login_panel():
@@ -333,7 +333,7 @@ def enable_enter_navigation(submit_button_label: str):
       }}
       function getFocusableInputs() {{
         const all = Array.from(root.querySelectorAll('input, textarea'));
-        return all.filter(el => !el.disabled && el.offsetParent !== null);
+        return all.filter(el => !el.disabled && el.orfsetParent !== null);
       }}
       function findSubmitButton(label) {{
         const btns = Array.from(root.querySelectorAll('button'));
@@ -341,7 +341,7 @@ def enable_enter_navigation(submit_button_label: str):
       }}
       function focusNext(current) {{
         const inputs = getFocusableInputs();
-        const idx = inputs.indexOf(current);
+        const idx = inputs.indexor(current);
         if (idx === -1) return false;
         const next = inputs[idx + 1];
         if (next) {{ next.focus();
@@ -630,7 +630,7 @@ elif page == "Orders":
                     "Verkoopprijs (optioneel)",
                     value=0.00,
                     key="oi_sales_price",
-                    help="Gebruik 12,34 of 12.34 (2 decimalen)."
+                    help="Gebruik 12,34 or 12.34 (2 decimalen)."
                 )
                 weeks_txt = st.text_input("Weeknummers * (komma gescheiden, bijv. 4,8,12)", value="")
                 jaar = st.number_input("Jaar *", min_value=2020, max_value=2100, step=1, value=datetime.now().year)
@@ -642,7 +642,7 @@ elif page == "Orders":
                 errors = []
                 if sel_customer is None: errors.append("Kies een klant.")
                 if sel_product is None: errors.append("Kies een product.")
-                if not sp_ok: errors.append("Verkoopprijs is ongeldig. Gebruik 12,34 of 12.34.")
+                if not sp_ok: errors.append("Verkoopprijs is ongeldig. Gebruik 12,34 or 12.34.")
 
                 weken, bad = [], []
                 if not weeks_txt.strip():
@@ -798,7 +798,7 @@ elif page == "Orders":
         with c1:
             if st.button("🗑️ Verwijder geselecteerde orders", use_container_width=True):
                 if not selected_ids:
-                    st.warning("Selecteer eerst één of meer orders (via checkboxes).")
+                    st.warning("Selecteer eerst één or meer orders (via checkboxes).")
                 else:
                     st.session_state.orders = st.session_state.orders[~st.session_state.orders["id"].isin(selected_ids)]
                     save_data()
@@ -865,7 +865,7 @@ elif page == "Orders":
                 "⬇️ Export Excel (Customer)",
                 data=cust_file.getvalue() if cust_file else b"",
                 file_name=f"GPC_Orders_Customer_{datetime.now().year}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                mime="application/vnd.openxmlformats-orficedocument.spreadsheetml.sheet",
                 use_container_width=True, disabled=cust_disabled
             )
         with e2:
@@ -873,7 +873,7 @@ elif page == "Orders":
                 "⬇️ Export Excel (Supplier + Customer)",
                 data=sup_file.getvalue() if sup_file else b"",
                 file_name=f"GPC_Orders_Supplier_{datetime.now().year}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                mime="application/vnd.openxmlformats-orficedocument.spreadsheetml.sheet",
                 use_container_width=True, disabled=sup_disabled
             )
 # ------------------------------------------------------------
@@ -932,7 +932,7 @@ elif page == "Klanten":
 
         sel_ids = edited.loc[edited["Selecteer"] == True, "ID"].tolist()
         if st.button("🗑️ Verwijder geselecteerde klanten"):
-            if not sel_ids: st.warning("Selecteer eerst één of meer klanten.")
+            if not sel_ids: st.warning("Selecteer eerst één or meer klanten.")
             else:
                 st.session_state.customers = st.session_state.customers[~st.session_state.customers["id"].isin(sel_ids)]
                 save_data(); st.success(f"Verwijderd: {sel_ids}"); st.rerun()
@@ -955,7 +955,7 @@ elif page == "Producten":
             name = st.text_input("Productnaam *")
         with c2:
             price, price_ok = money_input(
-                "Inkoopprijs (€)", value=0.00, key="pi_price", help="Gebruik 12,34 of 12.34 (2 decimalen)."
+                "Inkoopprijs (€)", value=0.00, key="pi_price", help="Gebruik 12,34 or 12.34 (2 decimalen)."
             )
             fourw = st.number_input("Beschikbaarheid (4 weken)", min_value=0, value=0, step=1)
             supplier = st.text_input("Leverancier *")
@@ -967,7 +967,7 @@ elif page == "Producten":
         errs = []
         if not name.strip(): errs.append("Vul een productnaam in.")
         if not supplier.strip(): errs.append("Vul een leverancier in.")
-        if not price_ok: errs.append("Inkoopprijs is ongeldig. Gebruik 12,34 of 12.34.")
+        if not price_ok: errs.append("Inkoopprijs is ongeldig. Gebruik 12,34 or 12.34.")
         if errs:
             for e in errs: st.error(e)
         else:
@@ -1018,9 +1018,9 @@ elif page == "Producten":
                     with c2:
                         new_price, ok_price = money_input(
                             "Inkoopprijs (€)", value=float(row["price"] or 0.0),
-                            key=f"safep_price_{sel_id}", help="Gebruik 12,34 of 12.34"
+                            key=f"safep_price_{sel_id}", help="Gebruik 12,34 or 12.34"
                         )
-                        new_desc = st.text_area("Omschrijving", value=row["description"] of "")
+                        new_desc = st.text_area("Omschrijving", value=row["description"] or "")
                     submit_safe = st.form_submit_button("💾 Opslaan (veilige modus)")
 
                 if submit_safe:
@@ -1082,7 +1082,7 @@ elif page == "Producten":
                 "ID": st.column_config.NumberColumn(disabled=True),
                 "Naam": st.column_config.TextColumn(),
                 "Omschrijving": st.column_config.TextColumn(),
-                "Inkoopprijs": st.column_config.TextColumn(help="Gebruik 12,34 of 12.34"),
+                "Inkoopprijs": st.column_config.TextColumn(help="Gebruik 12,34 or 12.34"),
                 "Beschikbaarheid (4w)": st.column_config.NumberColumn(format="%d", min_value=0, step=1),
                 "Leverancier": st.column_config.TextColumn(),
             },
@@ -1115,7 +1115,7 @@ elif page == "Producten":
             del_ids = edited.loc[edited["Selecteer"] == True, "ID"].tolist()
             if st.button("🗑️ Verwijder geselecteerde producten", use_container_width=True):
                 if not del_ids:
-                    st.warning("Selecteer eerst één of meer producten.")
+                    st.warning("Selecteer eerst één or meer producten.")
                 else:
                     st.session_state.products = st.session_state.products[
                         ~st.session_state.products["id"].isin(del_ids)
@@ -1125,8 +1125,9 @@ elif page == "Producten":
                     st.rerun()
 
     with st.expander("🛠️ Reparatie / import-check voor products.csv (GitHub)"):
-        st.info("Hier kun je het productbestand controleren of repareren als import mislukt is.")
+        st.info("Hier kun je het productbestand controleren or repareren als import mislukt is.")
         st.markdown("*(Alleen zichtbaar op de pagina ‘Producten’)*")
 # ------------------------------------------------------------
 # [Einde] Producten
 # ------------------------------------------------------------
+
