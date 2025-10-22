@@ -1,6 +1,6 @@
 streamlit>=1.31
 pandas
-openpyxl
-pyyaml
 requests
-streamlit-aggrid==0.3.4.post3
+pyyaml
+openpyxl
+st-aggrid==0.3.4.post3
