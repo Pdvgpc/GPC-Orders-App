@@ -789,10 +789,42 @@ elif page == "Orders":
         except Exception:
             pass
 
-        grid_data = pd.DataFrame(grid_ret["data"])
-        sel_rows = grid_ret.get("selected_rows", []) or []
-        selected_ids = [int(r["_OID_keep"]) for r in sel_rows if "_OID_keep" in r and pd.notna(r["_OID_keep"])]
+        # Zorg dat we netjes omgaan met verschillende return-typen van AgGrid
+grid_payload = grid_ret or {}
 
+# data
+_grid_data = grid_payload.get("data", [])
+if isinstance(_grid_data, pd.DataFrame):
+    grid_data = _grid_data.copy()
+else:
+    grid_data = pd.DataFrame(_grid_data)
+
+# selected_rows kan list[dict], DataFrame, Series of None zijn
+_sel = grid_payload.get("selected_rows", None)
+if _sel is None:
+    sel_rows = []
+elif isinstance(_sel, pd.DataFrame):
+    sel_rows = _sel.to_dict(orient="records")
+elif isinstance(_sel, pd.Series):
+    sel_rows = _sel.to_list()
+elif isinstance(_sel, list):
+    sel_rows = _sel
+else:
+    # fallback – probeer te casten naar list
+    try:
+        sel_rows = list(_sel)
+    except Exception:
+        sel_rows = []
+
+# IDs veilig extraheren
+selected_ids = []
+for r in sel_rows:
+    try:
+        oid_keep = r.get("_OID_keep") if isinstance(r, dict) else None
+        if oid_keep is not None and pd.notna(oid_keep):
+            selected_ids.append(int(oid_keep))
+    except Exception:
+        pass
         c1, c2, _ = st.columns([1,1,6])
 
         with c1:
@@ -1130,4 +1162,5 @@ elif page == "Producten":
 # ------------------------------------------------------------
 # [Einde] Producten
 # ------------------------------------------------------------
+
 
