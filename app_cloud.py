@@ -19,34 +19,8 @@ import streamlit.components.v1 as components
 # AgGrid: sorteren op kolomtitels + inline bewerken
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
-# Gebruik st.secrets via een dict (fallback naar ENV)
-def _merge_secrets_and_env():
-    s = {}
-    try:
-        s = dict(st.secrets)  # werkt als .streamlit/secrets.toml aanwezig is
-    except Exception:
-        s = {}
-    def pick(key, default=None):
-        v = s.get(key) if isinstance(s, dict) else None
-        if v is None or str(v).strip() in ("", "None"):
-            v = os.getenv(key, default)
-        return v
-    return {
-        "GITHUB_TOKEN": pick("GITHUB_TOKEN"),
-        "GITHUB_OWNER": pick("GITHUB_OWNER"),
-        "GITHUB_REPO":  pick("GITHUB_REPO"),
-        "DATA_DIR":     pick("DATA_DIR", "data"),
-    }
-
-SEC = _merge_secrets_and_env()
-
-_missing = [k for k, v in SEC.items() if not v]
-if _missing:
-    st.error(
-        "Ontbrekende instellingen: " + ", ".join(_missing) +
-        ". Zet ze als omgevingsvariabelen (export GITHUB_TOKEN=… enz.) or in .streamlit/secrets.toml."
-    )
-    st.stop()
+# Gebruik st.secrets via een dict
+SEC = dict(st.secrets)
 
 # ------------------------------------------------------------
 # [Start] App Config
@@ -77,7 +51,11 @@ def _gh_api(path: str) -> str:
 def _gh_get_text(path_in_repo: str) -> Optional[str]:
     """Leest een bestand (text) uit de repo. None als het niet bestaat."""
     url = _gh_api(f"/contents/{path_in_repo}")
-    r = requests.get(url, headers=_gh_headers())
+    try:
+        r = requests.get(url, headers=_gh_headers(), timeout=10)
+    except Exception as e:
+        st.error(f"GitHub verbinding mislukt: {e}")
+        return ""
     if r.status_code == 200:
         data = r.json()
         return base64.b64decode(data["content"]).decode("utf-8", errors="ignore")
@@ -89,7 +67,11 @@ def _gh_get_text(path_in_repo: str) -> Optional[str]:
 def _gh_put_text(path_in_repo: str, content_text: str, msg: str):
     """Schrijft/maakt tekstbestand naar de repo (branch main)."""
     url = _gh_api(f"/contents/{path_in_repo}")
-    r = requests.get(url, headers=_gh_headers())
+    try:
+        r = requests.get(url, headers=_gh_headers(), timeout=10)
+    except Exception as e:
+        st.error(f"GitHub verbinding mislukt: {e}")
+        return
     sha = r.json().get("sha") if r.status_code == 200 else None
 
     payload = {
@@ -100,7 +82,11 @@ def _gh_put_text(path_in_repo: str, content_text: str, msg: str):
     if sha:
         payload["sha"] = sha
 
-    r2 = requests.put(url, headers=_gh_headers(), data=json.dumps(payload))
+    try:
+        r2 = requests.put(url, headers=_gh_headers(), data=json.dumps(payload), timeout=10)
+    except Exception as e:
+        st.error(f"GitHub schrijf-verbinding mislukt: {e}")
+        return
     if r2.status_code not in (200, 201):
         st.error(f"GitHub schrijffout {r2.status_code}: {r2.text[:200]}")
 
@@ -133,7 +119,7 @@ def load_auth() -> dict:
         with open(AUTH_YAML, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     except Exception:
-        st.error("auth.yaml niet gevonden or ongeldig. Voeg auth.yaml toe aan de repo.")
+        st.error("auth.yaml niet gevonden of ongeldig. Voeg auth.yaml toe aan de repo.")
         return {}
 
 def login_panel():
@@ -333,7 +319,7 @@ def enable_enter_navigation(submit_button_label: str):
       }}
       function getFocusableInputs() {{
         const all = Array.from(root.querySelectorAll('input, textarea'));
-        return all.filter(el => !el.disabled && el.orfsetParent !== null);
+        return all.filter(el => !el.disabled && el.offsetParent !== null);
       }}
       function findSubmitButton(label) {{
         const btns = Array.from(root.querySelectorAll('button'));
@@ -341,7 +327,7 @@ def enable_enter_navigation(submit_button_label: str):
       }}
       function focusNext(current) {{
         const inputs = getFocusableInputs();
-        const idx = inputs.indexor(current);
+        const idx = inputs.indexOf(current);
         if (idx === -1) return false;
         const next = inputs[idx + 1];
         if (next) {{ next.focus();
@@ -534,9 +520,9 @@ def make_pivot_amount(df: pd.DataFrame, row_fields: list) -> pd.DataFrame:
 # ------------------------------------------------------------
 # [Start] Init state + Sidebar
 # ------------------------------------------------------------
-ensure_state()
-
+# Let op: eerst inloggen tonen, daarna pas data laden (ensure_state)
 user = login_panel()
+ensure_state()
 
 st.sidebar.title("🌿 GPC Orders Systeem")
 st.sidebar.success(f"👤 Ingelogd als **{user['name']}**")
@@ -630,7 +616,7 @@ elif page == "Orders":
                     "Verkoopprijs (optioneel)",
                     value=0.00,
                     key="oi_sales_price",
-                    help="Gebruik 12,34 or 12.34 (2 decimalen)."
+                    help="Gebruik 12,34 of 12.34 (2 decimalen)."
                 )
                 weeks_txt = st.text_input("Weeknummers * (komma gescheiden, bijv. 4,8,12)", value="")
                 jaar = st.number_input("Jaar *", min_value=2020, max_value=2100, step=1, value=datetime.now().year)
@@ -642,7 +628,7 @@ elif page == "Orders":
                 errors = []
                 if sel_customer is None: errors.append("Kies een klant.")
                 if sel_product is None: errors.append("Kies een product.")
-                if not sp_ok: errors.append("Verkoopprijs is ongeldig. Gebruik 12,34 or 12.34.")
+                if not sp_ok: errors.append("Verkoopprijs is ongeldig. Gebruik 12,34 of 12.34.")
 
                 weken, bad = [], []
                 if not weeks_txt.strip():
@@ -780,57 +766,16 @@ elif page == "Orders":
             allow_unsafe_jscode=True,
         )
 
-        # Sla columnState op (breedtes behouden bij hertekenen)
-        try:
-            gs = grid_ret.get("grid_state") or {}
-            col_state = gs.get("columnState")
-            if col_state:
-                st.session_state[COL_STATE_KEY] = col_state
-        except Exception:
-            pass
+        grid_data = pd.DataFrame(grid_ret["data"])
+        sel_rows = grid_ret.get("selected_rows", []) or []
+        selected_ids = [int(r["_OID_keep"]) for r in sel_rows if "_OID_keep" in r and pd.notna(r["_OID_keep"])]
 
-        # Zorg dat we netjes omgaan met verschillende return-typen van AgGrid
-grid_payload = grid_ret or {}
-
-# data
-_grid_data = grid_payload.get("data", [])
-if isinstance(_grid_data, pd.DataFrame):
-    grid_data = _grid_data.copy()
-else:
-    grid_data = pd.DataFrame(_grid_data)
-
-# selected_rows kan list[dict], DataFrame, Series of None zijn
-_sel = grid_payload.get("selected_rows", None)
-if _sel is None:
-    sel_rows = []
-elif isinstance(_sel, pd.DataFrame):
-    sel_rows = _sel.to_dict(orient="records")
-elif isinstance(_sel, pd.Series):
-    sel_rows = _sel.to_list()
-elif isinstance(_sel, list):
-    sel_rows = _sel
-else:
-    # fallback – probeer te casten naar list
-    try:
-        sel_rows = list(_sel)
-    except Exception:
-        sel_rows = []
-
-# IDs veilig extraheren
-selected_ids = []
-for r in sel_rows:
-    try:
-        oid_keep = r.get("_OID_keep") if isinstance(r, dict) else None
-        if oid_keep is not None and pd.notna(oid_keep):
-            selected_ids.append(int(oid_keep))
-    except Exception:
-        pass
         c1, c2, _ = st.columns([1,1,6])
 
         with c1:
             if st.button("🗑️ Verwijder geselecteerde orders", use_container_width=True):
                 if not selected_ids:
-                    st.warning("Selecteer eerst één or meer orders (via checkboxes).")
+                    st.warning("Selecteer eerst één of meer orders (via checkboxes).")
                 else:
                     st.session_state.orders = st.session_state.orders[~st.session_state.orders["id"].isin(selected_ids)]
                     save_data()
@@ -891,7 +836,7 @@ for r in sel_rows:
         cust_file = _excel_export_bytes(cust_pivot, f"GPC Orders {datetime.now().year}") if not cust_disabled else None
         sup_file  = _excel_export_bytes(sup_pivot,  f"GPC Orders {datetime.now().year}") if not sup_disabled else None
 
-        ee1, e2 = st.columns(2)
+        e1, e2 = st.columns(2)
         with e1:
             st.download_button(
                 "⬇️ Export Excel (Customer)",
@@ -964,7 +909,7 @@ elif page == "Klanten":
 
         sel_ids = edited.loc[edited["Selecteer"] == True, "ID"].tolist()
         if st.button("🗑️ Verwijder geselecteerde klanten"):
-            if not sel_ids: st.warning("Selecteer eerst één or meer klanten.")
+            if not sel_ids: st.warning("Selecteer eerst één of meer klanten.")
             else:
                 st.session_state.customers = st.session_state.customers[~st.session_state.customers["id"].isin(sel_ids)]
                 save_data(); st.success(f"Verwijderd: {sel_ids}"); st.rerun()
@@ -987,7 +932,7 @@ elif page == "Producten":
             name = st.text_input("Productnaam *")
         with c2:
             price, price_ok = money_input(
-                "Inkoopprijs (€)", value=0.00, key="pi_price", help="Gebruik 12,34 or 12.34 (2 decimalen)."
+                "Inkoopprijs (€)", value=0.00, key="pi_price", help="Gebruik 12,34 of 12.34 (2 decimalen)."
             )
             fourw = st.number_input("Beschikbaarheid (4 weken)", min_value=0, value=0, step=1)
             supplier = st.text_input("Leverancier *")
@@ -999,7 +944,7 @@ elif page == "Producten":
         errs = []
         if not name.strip(): errs.append("Vul een productnaam in.")
         if not supplier.strip(): errs.append("Vul een leverancier in.")
-        if not price_ok: errs.append("Inkoopprijs is ongeldig. Gebruik 12,34 or 12.34.")
+        if not price_ok: errs.append("Inkoopprijs is ongeldig. Gebruik 12,34 of 12.34.")
         if errs:
             for e in errs: st.error(e)
         else:
@@ -1050,7 +995,7 @@ elif page == "Producten":
                     with c2:
                         new_price, ok_price = money_input(
                             "Inkoopprijs (€)", value=float(row["price"] or 0.0),
-                            key=f"safep_price_{sel_id}", help="Gebruik 12,34 or 12.34"
+                            key=f"safep_price_{sel_id}", help="Gebruik 12,34 of 12.34"
                         )
                         new_desc = st.text_area("Omschrijving", value=row["description"] or "")
                     submit_safe = st.form_submit_button("💾 Opslaan (veilige modus)")
@@ -1114,7 +1059,7 @@ elif page == "Producten":
                 "ID": st.column_config.NumberColumn(disabled=True),
                 "Naam": st.column_config.TextColumn(),
                 "Omschrijving": st.column_config.TextColumn(),
-                "Inkoopprijs": st.column_config.TextColumn(help="Gebruik 12,34 or 12.34"),
+                "Inkoopprijs": st.column_config.TextColumn(help="Gebruik 12,34 of 12.34"),
                 "Beschikbaarheid (4w)": st.column_config.NumberColumn(format="%d", min_value=0, step=1),
                 "Leverancier": st.column_config.TextColumn(),
             },
@@ -1147,7 +1092,7 @@ elif page == "Producten":
             del_ids = edited.loc[edited["Selecteer"] == True, "ID"].tolist()
             if st.button("🗑️ Verwijder geselecteerde producten", use_container_width=True):
                 if not del_ids:
-                    st.warning("Selecteer eerst één or meer producten.")
+                    st.warning("Selecteer eerst één of meer producten.")
                 else:
                     st.session_state.products = st.session_state.products[
                         ~st.session_state.products["id"].isin(del_ids)
@@ -1157,11 +1102,8 @@ elif page == "Producten":
                     st.rerun()
 
     with st.expander("🛠️ Reparatie / import-check voor products.csv (GitHub)"):
-        st.info("Hier kun je het productbestand controleren or repareren als import mislukt is.")
+        st.info("Hier kun je het productbestand controleren of repareren als import mislukt is.")
         st.markdown("*(Alleen zichtbaar op de pagina ‘Producten’)*")
 # ------------------------------------------------------------
 # [Einde] Producten
 # ------------------------------------------------------------
-
-
-
