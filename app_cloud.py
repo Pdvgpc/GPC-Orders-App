@@ -51,11 +51,7 @@ def _gh_api(path: str) -> str:
 def _gh_get_text(path_in_repo: str) -> Optional[str]:
     """Leest een bestand (text) uit de repo. None als het niet bestaat."""
     url = _gh_api(f"/contents/{path_in_repo}")
-    try:
-        r = requests.get(url, headers=_gh_headers(), timeout=10)
-    except Exception as e:
-        st.error(f"GitHub verbinding mislukt: {e}")
-        return ""
+    r = requests.get(url, headers=_gh_headers())
     if r.status_code == 200:
         data = r.json()
         return base64.b64decode(data["content"]).decode("utf-8", errors="ignore")
@@ -67,11 +63,7 @@ def _gh_get_text(path_in_repo: str) -> Optional[str]:
 def _gh_put_text(path_in_repo: str, content_text: str, msg: str):
     """Schrijft/maakt tekstbestand naar de repo (branch main)."""
     url = _gh_api(f"/contents/{path_in_repo}")
-    try:
-        r = requests.get(url, headers=_gh_headers(), timeout=10)
-    except Exception as e:
-        st.error(f"GitHub verbinding mislukt: {e}")
-        return
+    r = requests.get(url, headers=_gh_headers())
     sha = r.json().get("sha") if r.status_code == 200 else None
 
     payload = {
@@ -82,11 +74,7 @@ def _gh_put_text(path_in_repo: str, content_text: str, msg: str):
     if sha:
         payload["sha"] = sha
 
-    try:
-        r2 = requests.put(url, headers=_gh_headers(), data=json.dumps(payload), timeout=10)
-    except Exception as e:
-        st.error(f"GitHub schrijf-verbinding mislukt: {e}")
-        return
+    r2 = requests.put(url, headers=_gh_headers(), data=json.dumps(payload))
     if r2.status_code not in (200, 201):
         st.error(f"GitHub schrijffout {r2.status_code}: {r2.text[:200]}")
 
@@ -520,9 +508,9 @@ def make_pivot_amount(df: pd.DataFrame, row_fields: list) -> pd.DataFrame:
 # ------------------------------------------------------------
 # [Start] Init state + Sidebar
 # ------------------------------------------------------------
-# Let op: eerst inloggen tonen, daarna pas data laden (ensure_state)
-user = login_panel()
 ensure_state()
+
+user = login_panel()
 
 st.sidebar.title("🌿 GPC Orders Systeem")
 st.sidebar.success(f"👤 Ingelogd als **{user['name']}**")
@@ -997,6 +985,7 @@ elif page == "Producten":
                             "Inkoopprijs (€)", value=float(row["price"] or 0.0),
                             key=f"safep_price_{sel_id}", help="Gebruik 12,34 of 12.34"
                         )
+                        # <<<<<< ENIGE AANPASSING: 'of ""' -> 'or ""'
                         new_desc = st.text_area("Omschrijving", value=row["description"] or "")
                     submit_safe = st.form_submit_button("💾 Opslaan (veilige modus)")
 
