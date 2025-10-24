@@ -1,6 +1,6 @@
-streamlit
+streamlit>=1.31
 pandas
 openpyxl
 pyyaml
 requests
-st-aggrid
+streamlit-aggrid
