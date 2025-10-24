@@ -1,4 +1,4 @@
-streamlit>=1.31
+streamlit
 pandas
 openpyxl
 pyyaml
