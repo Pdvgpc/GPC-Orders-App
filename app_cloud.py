@@ -51,7 +51,11 @@ def _gh_api(path: str) -> str:
 def _gh_get_text(path_in_repo: str) -> Optional[str]:
     """Leest een bestand (text) uit de repo. None als het niet bestaat."""
     url = _gh_api(f"/contents/{path_in_repo}")
-    r = requests.get(url, headers=_gh_headers())
+    try:
+        r = requests.get(url, headers=_gh_headers(), timeout=10)
+    except Exception as e:
+        st.error(f"GitHub verbinding mislukt: {e}")
+        return ""
     if r.status_code == 200:
         data = r.json()
         return base64.b64decode(data["content"]).decode("utf-8", errors="ignore")
@@ -63,7 +67,11 @@ def _gh_get_text(path_in_repo: str) -> Optional[str]:
 def _gh_put_text(path_in_repo: str, content_text: str, msg: str):
     """Schrijft/maakt tekstbestand naar de repo (branch main)."""
     url = _gh_api(f"/contents/{path_in_repo}")
-    r = requests.get(url, headers=_gh_headers())
+    try:
+        r = requests.get(url, headers=_gh_headers(), timeout=10)
+    except Exception as e:
+        st.error(f"GitHub verbinding mislukt: {e}")
+        return
     sha = r.json().get("sha") if r.status_code == 200 else None
 
     payload = {
@@ -74,7 +82,11 @@ def _gh_put_text(path_in_repo: str, content_text: str, msg: str):
     if sha:
         payload["sha"] = sha
 
-    r2 = requests.put(url, headers=_gh_headers(), data=json.dumps(payload))
+    try:
+        r2 = requests.put(url, headers=_gh_headers(), data=json.dumps(payload), timeout=10)
+    except Exception as e:
+        st.error(f"GitHub schrijf-verbinding mislukt: {e}")
+        return
     if r2.status_code not in (200, 201):
         st.error(f"GitHub schrijffout {r2.status_code}: {r2.text[:200]}")
 
@@ -508,9 +520,9 @@ def make_pivot_amount(df: pd.DataFrame, row_fields: list) -> pd.DataFrame:
 # ------------------------------------------------------------
 # [Start] Init state + Sidebar
 # ------------------------------------------------------------
-ensure_state()
-
+# Let op: eerst inloggen tonen, daarna pas data laden (ensure_state)
 user = login_panel()
+ensure_state()
 
 st.sidebar.title("🌿 GPC Orders Systeem")
 st.sidebar.success(f"👤 Ingelogd als **{user['name']}**")
@@ -663,22 +675,55 @@ elif page == "Orders":
 
     # ----- Filters -----
     with st.expander("🔎 Filters (tabel & export)"):
+        # Vrije tekst zoeken in meerdere kolommen
+        q = st.text_input(
+            "Zoeken (bijv. 'monstera')",
+            value="",
+            placeholder="Zoek in Customer, Supplier, Article of Description…"
+        )
+        st.caption("Filtert op gedeeltelijke matches (hoofdletter-ongevoelig) in Customer, Supplier, Article en Description.")
+
+        # Optioneel: aanvullende keuzefilters als verfijning
         f1, f2, f3, f4 = st.columns(4)
         with f1:
-            flt_customer = st.multiselect("Customer", options=sorted(base_df["Customer"].dropna().astype(str).unique().tolist()))
+            flt_customer = st.multiselect(
+                "Customer (optioneel)",
+                options=sorted(base_df["Customer"].dropna().astype(str).unique().tolist())
+            )
         with f2:
-            flt_supplier = st.multiselect("Supplier", options=sorted(base_df["Supplier"].dropna().astype(str).unique().tolist()))
+            flt_supplier = st.multiselect(
+                "Supplier (optioneel)",
+                options=sorted(base_df["Supplier"].dropna().astype(str).unique().tolist())
+            )
         with f3:
-            flt_article = st.multiselect("Article", options=sorted(base_df["Article"].dropna().astype(str).unique().tolist()))
+            flt_article = st.multiselect(
+                "Article (optioneel)",
+                options=sorted(base_df["Article"].dropna().astype(str).unique().tolist())
+            )
         with f4:
             unique_weeks = sorted(base_df["Week"].dropna().astype(int).unique().tolist())
-            flt_weeks = st.multiselect("Week", options=unique_weeks)
+            flt_weeks = st.multiselect("Week (optioneel)", options=unique_weeks)
 
     filtered_df = base_df.copy()
-    if flt_customer: filtered_df = filtered_df[filtered_df["Customer"].isin(flt_customer)]
-    if flt_supplier: filtered_df = filtered_df[filtered_df["Supplier"].isin(flt_supplier)]
-    if flt_article:  filtered_df = filtered_df[filtered_df["Article"].isin(flt_article)]
-    if flt_weeks:    filtered_df = filtered_df[filtered_df["Week"].isin(flt_weeks)]
+
+    # Vrije tekstfilter toepassen
+    if q.strip():
+        query = q.strip()
+        cols_to_search = ["Customer", "Supplier", "Article", "Description"]
+        mask = False
+        for col in cols_to_search:
+            mask = mask | filtered_df[col].astype(str).str.contains(query, case=False, na=False)
+        filtered_df = filtered_df[mask]
+
+    # Extra verfijning via keuzelijsten
+    if flt_customer:
+        filtered_df = filtered_df[filtered_df["Customer"].isin(flt_customer)]
+    if flt_supplier:
+        filtered_df = filtered_df[filtered_df["Supplier"].isin(flt_supplier)]
+    if flt_article:
+        filtered_df = filtered_df[filtered_df["Article"].isin(flt_article)]
+    if flt_weeks:
+        filtered_df = filtered_df[filtered_df["Week"].isin(flt_weeks)]
 
     # ----- Tabel (AgGrid) – gedrag exact houden + fixes -----
     if filtered_df.empty:
@@ -703,7 +748,7 @@ elif page == "Orders":
         grid_df = editor_df.copy()
         grid_df["_OID_keep"] = filtered_df["_OID"].values
 
-        # === AgGrid opties (met rowHeight + persistente column widths) ===
+        # === AgGrid opties ===
         gob = GridOptionsBuilder.from_dataframe(grid_df)
 
         # Kolommen bewerkbaar zoals afgesproken
@@ -730,12 +775,7 @@ elif page == "Orders":
 
         grid_options = gob.build()
 
-        # === Kolombreedtes onthouden via columnState ===
-        COL_STATE_KEY = "orders_grid_column_state"
-        if st.session_state.get(COL_STATE_KEY):
-            grid_options["columnState"] = st.session_state[COL_STATE_KEY]
-
-        # === Dynamische hoogte zodat laatste rij nooit half is ===
+        # Dynamische hoogte
         n_rows = len(grid_df)
         row_h = grid_options.get("rowHeight", 34) or 34
         header_h = grid_options.get("headerHeight", 34) or 34
@@ -748,15 +788,37 @@ elif page == "Orders":
             gridOptions=grid_options,
             update_mode=GridUpdateMode.MODEL_CHANGED,
             data_return_mode="AS_INPUT",
-            fit_columns_on_grid_load=False,   # laat gebruiker breedtes bepalen
+            fit_columns_on_grid_load=False,
             enable_enterprise_modules=False,
             height=grid_height,
             allow_unsafe_jscode=True,
         )
 
-        grid_data = pd.DataFrame(grid_ret["data"])
-        sel_rows = grid_ret.get("selected_rows", []) or []
-        selected_ids = [int(r["_OID_keep"]) for r in sel_rows if "_OID_keep" in r and pd.notna(r["_OID_keep"])]
+        # ====== ROBUUST LEZEN VAN GRID-OUTPUT (fix voor ValueError) ======
+        grid_data_raw = grid_ret.get("data", [])
+        if isinstance(grid_data_raw, pd.DataFrame):
+            grid_data = grid_data_raw
+        else:
+            grid_data = pd.DataFrame(grid_data_raw)
+
+        sel_rows_raw = grid_ret.get("selected_rows", [])
+        if isinstance(sel_rows_raw, list):
+            sel_rows_list = sel_rows_raw
+        else:
+            try:
+                sel_rows_list = sel_rows_raw.to_dict(orient="records")
+            except Exception:
+                sel_rows_list = []
+
+        selected_ids = []
+        for r in sel_rows_list:
+            try:
+                val = r.get("_OID_keep", None)
+                if val is not None and str(val) != "" and not pd.isna(val):
+                    selected_ids.append(int(val))
+            except Exception:
+                pass
+        # ================================================================
 
         c1, c2, _ = st.columns([1,1,6])
 
@@ -809,10 +871,7 @@ elif page == "Orders":
         sup_rows  = ["Supplier","Article","Description","Customer"]
 
         # Let op: make_pivot_amount verwacht kolommen 'Week' en 'Quantity'
-        # We geven filtered_df met Engelstalige kolommen door
-        cust_df = filtered_df.rename(columns={
-            "Aantal":"Quantity", "Week":"Week"
-        })
+        cust_df = filtered_df.rename(columns={"Aantal":"Quantity", "Week":"Week"})
         sup_df  = cust_df
 
         cust_pivot = make_pivot_amount(cust_df[cust_rows + ["Week","Quantity"]], cust_rows)
@@ -985,7 +1044,6 @@ elif page == "Producten":
                             "Inkoopprijs (€)", value=float(row["price"] or 0.0),
                             key=f"safep_price_{sel_id}", help="Gebruik 12,34 of 12.34"
                         )
-                        # <<<<<< ENIGE AANPASSING: 'of ""' -> 'or ""'
                         new_desc = st.text_area("Omschrijving", value=row["description"] or "")
                     submit_safe = st.form_submit_button("💾 Opslaan (veilige modus)")
 
