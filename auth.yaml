@@ -1,17 +1,6 @@
 credentials:
   usernames:
-    pieter:
-      email: pieter@greenplantcuttings.com
-      name: "Pieter"
-      # SHA-256 van "Pieter#2025!"
-      password_sha256: "806e638b763ca46bc46c57857ed234ba4421174a96564eedf2603780925edf4d"
-    bert:
-      email: bert@greenplantcuttings.com
-      name: "Bert"
-      # SHA-256 van "Bert#2025!"
-      password_sha256: "81a89a545f3618a4226a048b92922a5d8681120d4bc7ad2f630321c953ddf0e4"
-
-cookie:
-  name: gpc_auth
-  key: "change_this_secret_key_please"
-  expiry_days: 14
+    admin:
+      name: "Administrator"
+      email: "admin@example.com"
+      password_plain: "test123"
