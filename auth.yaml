@@ -1,6 +1,6 @@
 credentials:
   usernames:
-    admin:
-      name: "Administrator"
-      email: "admin@example.com"
-      password_plain: "test123"
+    pdev:
+      name: "Pieter de Vries"
+      email: "pieter@greenplantcuttings.com"
+      password_sha256: "1ee9d3d0ede747558b859a3a845097f90643fce34d597c18ce3a78dd28bdd2ed"
