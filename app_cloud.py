@@ -868,7 +868,7 @@ elif page == "Orders":
         # Customer export (Engels)
         cust_rows = ["Customer","Article","Description","Sales Price"]
         # Supplier export: nu mét Customer (Engels)
-        sup_rows  = ["Supplier","Article","Description","Customer"]
+        sup_rows  = ["Supplier","Customer","Article","Description","Purchase Price"]
 
         # Let op: make_pivot_amount verwacht kolommen 'Week' en 'Quantity'
         cust_df = filtered_df.rename(columns={"Aantal":"Quantity", "Week":"Week"})
@@ -1154,3 +1154,4 @@ elif page == "Producten":
 # ------------------------------------------------------------
 # [Einde] Producten
 # ------------------------------------------------------------
+
