@@ -215,7 +215,7 @@ def load_data():
     })
     st.session_state.products = prod
 
-    # CUSTOMERS
+    # CUSTOMERS  (← hier zat de typo; nu goed)
     g = _gh_get_csv(f"{repo_dir}/customers.csv")
     if g is None:
         cust = pd.DataFrame(columns=["id","name","email"])
@@ -864,41 +864,115 @@ elif page == "Orders":
                 st.rerun()
 
         # ----- Export -----
-        st.markdown("### ⬇️ Export Excel (pivot per week)")
+        st.markdown("### ⬇️ Export Excel (pivot per week én jaar)")
+
+        # Basis: werk op een kopie en coercen types
+        export_base = filtered_df.copy()
+
+        # Zorg dat de verwachte kolommen bestaan en juiste types hebben
+        if "Quantity" not in export_base.columns and "Aantal" in export_base.columns:
+            export_base = export_base.rename(columns={"Aantal": "Quantity"})
+
+        export_base["Week"] = pd.to_numeric(export_base.get("Week", pd.Series(dtype="Int64")),
+                                            errors="coerce").astype("Int64")
+        export_base["Year"] = pd.to_numeric(export_base.get("Year", pd.Series(dtype="Int64")),
+                                            errors="coerce").astype("Int64")
+        export_base["Quantity"] = pd.to_numeric(export_base.get("Quantity", pd.Series(dtype="float")),
+                                                errors="coerce").fillna(0).astype(int)
+
+        # Maak YearWeek-labels zoals 202550 (jaar 2025, week 50)
+        def _mk_yw(row):
+            y = row.get("Year")
+            w = row.get("Week")
+            if pd.isna(y) or pd.isna(w):
+                return None
+            try:
+                return f"{int(y)}{int(w):02d}"
+            except Exception:
+                return None
+
+        export_base["YearWeek"] = export_base.apply(_mk_yw, axis=1)
+
+        # Helper: pivot op YearWeek i.p.v. Week
+        def pivot_by_yearweek(df_src: pd.DataFrame, row_fields: list) -> pd.DataFrame:
+            if df_src.empty:
+                return pd.DataFrame(columns=row_fields)
+            need = [c for c in row_fields + ["YearWeek", "Quantity"] if c in df_src.columns]
+            df = df_src[need].copy()
+            if df.empty:
+                return pd.DataFrame(columns=row_fields)
+
+            pvt = df.pivot_table(
+                index=row_fields,
+                columns="YearWeek",
+                values="Quantity",
+                aggfunc="sum",
+                dropna=False
+            )
+            # Kolomnamen sorteren op numerieke waarde (jaar+week)
+            if isinstance(pvt.columns, pd.MultiIndex):
+                pvt.columns = [c[-1] for c in pvt.columns]
+
+            cols = [c for c in pvt.columns if c is not None]
+            try:
+                cols_sorted = sorted(cols, key=lambda x: int(x))
+            except Exception:
+                cols_sorted = sorted(cols)
+            pvt = pvt.reindex(columns=cols_sorted)
+
+            pvt = pvt.astype("float").where(pd.notna(pvt), None)
+            pvt = pvt.reset_index()
+
+            # Rijen zonder aantallen eruit
+            yw_cols = [c for c in pvt.columns if c not in row_fields]
+            if yw_cols:
+                tmp = pd.DataFrame(pvt[yw_cols]).fillna(0).sum(axis=1)
+                pvt = pvt[tmp > 0]
+
+            for c in row_fields:
+                if c in pvt.columns:
+                    pvt[c] = pvt[c].astype("string").fillna("")
+
+            return pvt
+
         # Customer export (Engels)
         cust_rows = ["Customer","Article","Description","Sales Price"]
-        # Supplier export: nu mét Customer (Engels)
-        sup_rows  = ["Supplier","Customer","Article","Description","Purchase Price"]
+        # Supplier export: met Customer erbij (Engels)
+        sup_rows  = ["Supplier","Article","Description","Customer"]
 
-        # Let op: make_pivot_amount verwacht kolommen 'Week' en 'Quantity'
-        cust_df = filtered_df.rename(columns={"Aantal":"Quantity", "Week":"Week"})
-        sup_df  = cust_df
+        need_cols_cust = [c for c in cust_rows + ["Year","Week","YearWeek","Quantity"] if c in export_base.columns]
+        need_cols_sup  = [c for c in sup_rows  + ["Year","Week","YearWeek","Quantity"] if c in export_base.columns]
 
-        cust_pivot = make_pivot_amount(cust_df[cust_rows + ["Week","Quantity"]], cust_rows)
-        sup_pivot  = make_pivot_amount(sup_df [sup_rows  + ["Week","Quantity"]], sup_rows)
+        cust_df = export_base[need_cols_cust].copy() if need_cols_cust else pd.DataFrame(columns=cust_rows+["YearWeek","Quantity"])
+        sup_df  = export_base[need_cols_sup ].copy() if need_cols_sup  else pd.DataFrame(columns=sup_rows +["YearWeek","Quantity"])
+
+        cust_pivot = pivot_by_yearweek(cust_df, cust_rows) if not cust_df.empty else pd.DataFrame(columns=cust_rows)
+        sup_pivot  = pivot_by_yearweek(sup_df,  sup_rows)  if not sup_df.empty  else pd.DataFrame(columns=sup_rows)
 
         cust_disabled = cust_pivot.empty
         sup_disabled  = sup_pivot.empty
 
         cust_file = _excel_export_bytes(cust_pivot, f"GPC Orders {datetime.now().year}") if not cust_disabled else None
-        sup_file  = _excel_export_bytes(sup_pivot,  f"GPC Orders {datetime.now().year}") if not sup_disabled else None
+        sup_file  = _excel_export_bytes(sup_pivot,  f"GPC Orders {datetime.now().year}") if not sup_disabled  else None
 
         e1, e2 = st.columns(2)
         with e1:
             st.download_button(
-                "⬇️ Export Excel (Customer)",
+                "⬇️ Export Excel (Customer: Jaar+Week)",
                 data=cust_file.getvalue() if cust_file else b"",
                 file_name=f"GPC_Orders_Customer_{datetime.now().year}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True, disabled=cust_disabled
+                use_container_width=True,
+                disabled=cust_disabled
             )
         with e2:
             st.download_button(
-                "⬇️ Export Excel (Supplier + Customer)",
+                "⬇️ Export Excel (Supplier + Customer: Jaar+Week)",
                 data=sup_file.getvalue() if sup_file else b"",
                 file_name=f"GPC_Orders_Supplier_{datetime.now().year}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True, disabled=sup_disabled
+                use_container_width=True,
+                disabled=sup_disabled
             )
 # ------------------------------------------------------------
 # [Einde] Orders
@@ -1088,7 +1162,7 @@ elif page == "Producten":
         prod_view["ID"] = pd.to_numeric(prod_view["ID"], errors="coerce").fillna(0).astype(int)
         prod_view["Beschikbaarheid (4w)"] = pd.to_numeric(prod_view["Beschikbaarheid (4w)"], errors="coerce").fillna(0).astype(int)
         for _c in ["Naam","Omschrijving","Leverancier"]:
-            prod_view[_c] = prod_view[_c].astype("string").fillna("")
+            prod_view[_c] = _c = prod_view[_c].astype("string").fillna("")
         prod_view["Inkoopprijs"] = (
             pd.to_numeric(prod_view["Inkoopprijs"], errors="coerce")
               .apply(lambda v: "" if pd.isna(v) else f"{float(v):.2f}".replace(".", ","))
@@ -1154,4 +1228,3 @@ elif page == "Producten":
 # ------------------------------------------------------------
 # [Einde] Producten
 # ------------------------------------------------------------
-
