@@ -938,7 +938,7 @@ elif page == "Orders":
         # Customer export (Engels)
         cust_rows = ["Customer","Article","Description","Sales Price"]
         # Supplier export: met Customer erbij (Engels)
-        sup_rows  = ["Supplier","Article","Description","Customer"]
+        sup_rows  = ["Supplier","Article","Description","Sales Price","Customer"]
 
         need_cols_cust = [c for c in cust_rows + ["Year","Week","YearWeek","Quantity"] if c in export_base.columns]
         need_cols_sup  = [c for c in sup_rows  + ["Year","Week","YearWeek","Quantity"] if c in export_base.columns]
@@ -1228,3 +1228,4 @@ elif page == "Producten":
 # ------------------------------------------------------------
 # [Einde] Producten
 # ------------------------------------------------------------
+
