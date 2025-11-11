@@ -215,7 +215,7 @@ def load_data():
     })
     st.session_state.products = prod
 
-    # CUSTOMERS  (← hier zat de typo; nu goed)
+    # CUSTOMERS
     g = _gh_get_csv(f"{repo_dir}/customers.csv")
     if g is None:
         cust = pd.DataFrame(columns=["id","name","email"])
@@ -683,7 +683,7 @@ elif page == "Orders":
         )
         st.caption("Filtert op gedeeltelijke matches (hoofdletter-ongevoelig) in Customer, Supplier, Article en Description.")
 
-        # Optioneel: aanvullende keuzefilters als verfijning
+        # Aanvullende keuzefilters
         f1, f2, f3, f4 = st.columns(4)
         with f1:
             flt_customer = st.multiselect(
@@ -701,6 +701,8 @@ elif page == "Orders":
                 options=sorted(base_df["Article"].dropna().astype(str).unique().tolist())
             )
         with f4:
+            unique_years = sorted(base_df["Year"].dropna().astype(int).unique().tolist())
+            flt_years = st.multiselect("Year (optioneel)", options=unique_years)
             unique_weeks = sorted(base_df["Week"].dropna().astype(int).unique().tolist())
             flt_weeks = st.multiselect("Week (optioneel)", options=unique_weeks)
 
@@ -722,6 +724,8 @@ elif page == "Orders":
         filtered_df = filtered_df[filtered_df["Supplier"].isin(flt_supplier)]
     if flt_article:
         filtered_df = filtered_df[filtered_df["Article"].isin(flt_article)]
+    if flt_years:
+        filtered_df = filtered_df[filtered_df["Year"].isin(flt_years)]
     if flt_weeks:
         filtered_df = filtered_df[filtered_df["Week"].isin(flt_weeks)]
 
@@ -864,7 +868,7 @@ elif page == "Orders":
                 st.rerun()
 
         # ----- Export -----
-        st.markdown("### ⬇️ Export Excel (pivot per week én jaar)")
+        st.markdown("### ⬇️ Export Excel (pivot per jaar+week)")
 
         # Basis: werk op een kopie en coercen types
         export_base = filtered_df.copy()
@@ -938,7 +942,7 @@ elif page == "Orders":
         # Customer export (Engels)
         cust_rows = ["Customer","Article","Description","Sales Price"]
         # Supplier export: met Customer erbij (Engels)
-        sup_rows  = ["Supplier","Article","Description","Sales Price","Customer"]
+        sup_rows  = ["Supplier","Article","Description","Customer"]
 
         need_cols_cust = [c for c in cust_rows + ["Year","Week","YearWeek","Quantity"] if c in export_base.columns]
         need_cols_sup  = [c for c in sup_rows  + ["Year","Week","YearWeek","Quantity"] if c in export_base.columns]
@@ -1160,9 +1164,11 @@ elif page == "Producten":
         })
         prod_view.insert(0, "Selecteer", False)
         prod_view["ID"] = pd.to_numeric(prod_view["ID"], errors="coerce").fillna(0).astype(int)
-        prod_view["Beschikbaarheid (4w)"] = pd.to_numeric(prod_view["Beschikbaarheid (4w)"], errors="coerce").fillna(0).astype(int)
+        prod_view["Beschikbaarheid (4w)"] = pd.to_numeric(
+            prod_view["Beschikbaarheid (4w)"], errors="coerce"
+        ).fillna(0).astype(int)
         for _c in ["Naam","Omschrijving","Leverancier"]:
-            prod_view[_c] = _c = prod_view[_c].astype("string").fillna("")
+            prod_view[_c] = prod_view[_c].astype("string").fillna("")
         prod_view["Inkoopprijs"] = (
             pd.to_numeric(prod_view["Inkoopprijs"], errors="coerce")
               .apply(lambda v: "" if pd.isna(v) else f"{float(v):.2f}".replace(".", ","))
@@ -1228,4 +1234,3 @@ elif page == "Producten":
 # ------------------------------------------------------------
 # [Einde] Producten
 # ------------------------------------------------------------
-
