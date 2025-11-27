@@ -735,7 +735,8 @@ elif page == "Orders":
     else:
         show_cols = ["Customer","Article","Description","Quantity","Purchase Price","Sales Price","Supplier",
                      "Week","Week Start (Mon)","Year"]
-        display_df = filtered_df[show_cols + ["_OID"]].copy()
+        # >>> hier ook _PID meenemen zodat we productprijs kunnen bijwerken
+        display_df = filtered_df[show_cols + ["_OID","_PID"]].copy()
 
         editor_df = display_df.copy()
         for c in ["Customer","Article","Description","Supplier"]:
@@ -751,14 +752,24 @@ elif page == "Orders":
 
         grid_df = editor_df.copy()
         grid_df["_OID_keep"] = filtered_df["_OID"].values
+        grid_df["_PID_keep"] = filtered_df["_PID"].values   # <<< nieuw: product-id bijhouden
 
         # === AgGrid opties ===
         gob = GridOptionsBuilder.from_dataframe(grid_df)
 
         # Kolommen bewerkbaar zoals afgesproken
-        editable_cols = {"Quantity": True, "Week": True, "Year": True, "Sales Price": True}
+        editable_cols = {
+            "Quantity": True,
+            "Week": True,
+            "Year": True,
+            "Sales Price": True,
+            "Purchase Price": True,     # <<< nieuw: Purchase Price bewerkbaar
+        }
         for col in grid_df.columns:
-            if col in ["Customer","Article","Description","Supplier","Purchase Price","Week Start (Mon)","_OID_keep"]:
+            if col in [
+                "Customer","Article","Description","Supplier",
+                "Week Start (Mon)","_OID_keep","_PID_keep"  # _PID_keep ook non-editable
+            ]:
                 gob.configure_column(col, editable=False)
             else:
                 gob.configure_column(col, editable=editable_cols.get(col, False))
@@ -818,6 +829,9 @@ elif page == "Orders":
         for r in sel_rows_list:
             try:
                 val = r.get("_OID_keep", None)
+            except Exception:
+                val = None
+            try:
                 if val is not None and str(val) != "" and not pd.isna(val):
                     selected_ids.append(int(val))
             except Exception:
@@ -838,31 +852,52 @@ elif page == "Orders":
 
         with c2:
             if st.button("💾 Wijzigingen opslaan", use_container_width=True):
-                base = st.session_state.orders.set_index("id")
-                for _, row in grid_data.iterrows():
-                    oid = row.get("_OID_keep")
-                    if pd.isna(oid):
-                        continue
-                    oid = int(oid)
-                    if oid in base.index:
-                        if pd.notna(row.get("Quantity")):
-                            base.at[oid, "quantity"] = int(row["Quantity"])
-                        if pd.notna(row.get("Week")):
-                            base.at[oid, "week_number"] = int(row["Week"])
-                        if pd.notna(row.get("Year")):
-                            base.at[oid, "year"] = int(row["Year"])
-                        sp = row.get("Sales Price")
-                        if isinstance(sp, str):
-                            sp = sp.strip().replace(",", ".")
-                        if sp == "":
-                            sp = None
-                        if sp is not None:
-                            try:
-                                base.at[oid, "sales_price"] = round(float(sp), 2)
-                            except Exception:
-                                pass
+                # Basis-tabellen
+                orders_base = st.session_state.orders.set_index("id")
+                products_base = st.session_state.products.set_index("id")
 
-                st.session_state.orders = base.reset_index()
+                for _, row in grid_data.iterrows():
+                    # ---- Orders aanpassen ----
+                    oid = row.get("_OID_keep")
+                    if oid is not None and not pd.isna(oid):
+                        oid = int(oid)
+                        if oid in orders_base.index:
+                            if pd.notna(row.get("Quantity")):
+                                orders_base.at[oid, "quantity"] = int(row["Quantity"])
+                            if pd.notna(row.get("Week")):
+                                orders_base.at[oid, "week_number"] = int(row["Week"])
+                            if pd.notna(row.get("Year")):
+                                orders_base.at[oid, "year"] = int(row["Year"])
+
+                            sp = row.get("Sales Price")
+                            if isinstance(sp, str):
+                                sp = sp.strip().replace(",", ".")
+                            if sp == "":
+                                sp = None
+                            if sp is not None:
+                                try:
+                                    orders_base.at[oid, "sales_price"] = round(float(sp), 2)
+                                except Exception:
+                                    pass
+
+                    # ---- Purchase Price -> products.price aanpassen ----
+                    pid = row.get("_PID_keep")
+                    if pid is not None and not pd.isna(pid):
+                        pid = int(pid)
+                        if pid in products_base.index:
+                            pp = row.get("Purchase Price")
+                            if isinstance(pp, str):
+                                pp = pp.strip().replace(",", ".")
+                            if pp == "":
+                                pp = None
+                            if pp is not None:
+                                try:
+                                    products_base.at[pid, "price"] = round(float(pp), 4)
+                                except Exception:
+                                    pass
+
+                st.session_state.orders = orders_base.reset_index()
+                st.session_state.products = products_base.reset_index()
                 save_data()
                 st.success("Wijzigingen opgeslagen.")
                 st.rerun()
