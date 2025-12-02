@@ -735,7 +735,7 @@ elif page == "Orders":
     else:
         show_cols = ["Customer","Article","Description","Quantity","Purchase Price","Sales Price","Supplier",
                      "Week","Week Start (Mon)","Year"]
-        # >>> hier ook _PID meenemen zodat we productprijs kunnen bijwerken
+        # ook _PID meenemen zodat we productprijs kunnen bijwerken
         display_df = filtered_df[show_cols + ["_OID","_PID"]].copy()
 
         editor_df = display_df.copy()
@@ -752,7 +752,7 @@ elif page == "Orders":
 
         grid_df = editor_df.copy()
         grid_df["_OID_keep"] = filtered_df["_OID"].values
-        grid_df["_PID_keep"] = filtered_df["_PID"].values   # <<< nieuw: product-id bijhouden
+        grid_df["_PID_keep"] = filtered_df["_PID"].values   # product-id bijhouden
 
         # === AgGrid opties ===
         gob = GridOptionsBuilder.from_dataframe(grid_df)
@@ -763,12 +763,12 @@ elif page == "Orders":
             "Week": True,
             "Year": True,
             "Sales Price": True,
-            "Purchase Price": True,     # <<< nieuw: Purchase Price bewerkbaar
+            "Purchase Price": True,     # Purchase Price bewerkbaar
         }
         for col in grid_df.columns:
             if col in [
                 "Customer","Article","Description","Supplier",
-                "Week Start (Mon)","_OID_keep","_PID_keep"  # _PID_keep ook non-editable
+                "Week Start (Mon)","_OID_keep","_PID_keep"
             ]:
                 gob.configure_column(col, editable=False)
             else:
@@ -790,6 +790,18 @@ elif page == "Orders":
 
         grid_options = gob.build()
 
+        # ------------ KOLOMBREEDTES TERUGZETTEN (ORDERS) ------------
+        saved_widths = st.session_state.get("orders_grid_col_widths", {})
+        if isinstance(saved_widths, dict) and grid_options.get("columnDefs"):
+            for col_def in grid_options["columnDefs"]:
+                try:
+                    field = col_def.get("field")
+                    if field in saved_widths and saved_widths[field]:
+                        col_def["width"] = saved_widths[field]
+                except Exception:
+                    pass
+        # -----------------------------------------------------------
+
         # Dynamische hoogte
         n_rows = len(grid_df)
         row_h = grid_options.get("rowHeight", 34) or 34
@@ -808,6 +820,37 @@ elif page == "Orders":
             height=grid_height,
             allow_unsafe_jscode=True,
         )
+
+        # ====== KOLOMBREEDTES OPSLAAN NA WIJZIGING ======
+        try:
+            grid_state = grid_ret.get("grid_state", {})
+            col_state_list = None
+
+            if isinstance(grid_state, dict):
+                # verschillende mogelijke structuren afvangen
+                if isinstance(grid_state.get("columns"), dict) and isinstance(grid_state["columns"].get("state"), list):
+                    col_state_list = grid_state["columns"]["state"]
+                elif isinstance(grid_state.get("columns"), list):
+                    col_state_list = grid_state["columns"]
+                elif isinstance(grid_state.get("column_state"), list):
+                    col_state_list = grid_state["column_state"]
+                elif isinstance(grid_state.get("columnState"), list):
+                    col_state_list = grid_state["columnState"]
+
+            if col_state_list:
+                new_widths = {}
+                for cs in col_state_list:
+                    if not isinstance(cs, dict):
+                        continue
+                    col_id = cs.get("colId")
+                    width = cs.get("width")
+                    if col_id and isinstance(width, (int, float)):
+                        new_widths[col_id] = int(width)
+                if new_widths:
+                    st.session_state["orders_grid_col_widths"] = new_widths
+        except Exception:
+            pass
+        # =================================================
 
         # ====== ROBUUST LEZEN VAN GRID-OUTPUT (fix voor ValueError) ======
         grid_data_raw = grid_ret.get("data", [])
