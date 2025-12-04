@@ -2,7 +2,7 @@
   "column_widths": {
     "Article": 500,
     "Customer": 250,
-    "Description": 200,
+    "Description": 250,
     "Purchase Price": 150,
     "Quantity": 150,
     "Sales Price": 150,
