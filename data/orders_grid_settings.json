@@ -1,0 +1,14 @@
+{
+  "column_widths": {
+    "Article": 250,
+    "Customer": 150,
+    "Description": 150,
+    "Purchase Price": 150,
+    "Quantity": 150,
+    "Sales Price": 150,
+    "Supplier": 150,
+    "Week": 150,
+    "Week Start (Mon)": 150,
+    "Year": 150
+  }
+}
