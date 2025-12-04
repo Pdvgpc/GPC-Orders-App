@@ -1,7 +1,7 @@
 {
   "column_widths": {
-    "Article": 350,
-    "Customer": 150,
+    "Article": 450,
+    "Customer": 250,
     "Description": 150,
     "Purchase Price": 150,
     "Quantity": 150,
