@@ -29,9 +29,6 @@ st.set_page_config(page_title="GPC Orders Systeem", layout="wide")
 
 HERE = os.path.dirname(__file__)
 AUTH_YAML = os.path.join(HERE, "auth.yaml")  # auth.yaml in repo (gebruikers/wachtwoorden)
-
-# UI settings-bestand in de repo (voor kolombreedtes e.d.)
-UI_SETTINGS_FILE = SEC.get("UI_SETTINGS_FILE", "data/ui_settings.json")
 # ------------------------------------------------------------
 # [Einde] App Config
 # ------------------------------------------------------------
@@ -73,7 +70,7 @@ def _gh_put_text(path_in_repo: str, content_text: str, msg: str):
     try:
         r = requests.get(url, headers=_gh_headers(), timeout=10)
     except Exception as e:
-        st.error(f"GitHub verbinding mislukt: {e}")
+        st.error(f"GitHub schrijf-verbinding mislukt (voor lezen sha): {e}")
         return
     sha = r.json().get("sha") if r.status_code == 200 else None
 
@@ -115,43 +112,36 @@ def _gh_put_csv(path_in_repo: str, df: pd.DataFrame, msg: str):
 
 
 # ------------------------------------------------------------
-# [Start] UI settings helpers (kolombreedtes e.d.)
+# [Start] Grid settings (kolombreedtes Orders-tabel)
 # ------------------------------------------------------------
-def load_ui_settings() -> dict:
-    """Laadt ui_settings.json uit GitHub (of leeg dict als niet bestaat)."""
-    if "ui_settings" in st.session_state:
-        return st.session_state["ui_settings"]
+def _orders_settings_path() -> str:
+    repo_dir = SEC.get("DATA_DIR", "data")
+    return f"{repo_dir}/orders_grid_settings.json"
 
-    txt = _gh_get_text(UI_SETTINGS_FILE)
-    if txt is None:
-        ui = {}
-    else:
-        txt = txt.strip()
-        if not txt:
-            ui = {}
-        else:
-            try:
-                ui = json.loads(txt)
-                if not isinstance(ui, dict):
-                    ui = {}
-            except Exception:
-                ui = {}
-
-    st.session_state["ui_settings"] = ui
-    return ui
-
-def save_ui_settings(ui: dict):
-    """Schrijft ui_settings.json naar GitHub en bewaart ook in session_state."""
-    if not isinstance(ui, dict):
-        ui = {}
-    st.session_state["ui_settings"] = ui
+def load_orders_grid_settings() -> dict:
+    """Laadt kolom-instellingen voor Orders uit GitHub (JSON)."""
+    path = _orders_settings_path()
+    txt = _gh_get_text(path)
+    if not txt:
+        return {}
     try:
-        pretty = json.dumps(ui, indent=2, ensure_ascii=False)
+        data = json.loads(txt)
+        if isinstance(data, dict):
+            return data
     except Exception:
-        pretty = "{}"
-    _gh_put_text(UI_SETTINGS_FILE, pretty, "update ui_settings.json")
+        pass
+    return {}
+
+def save_orders_grid_settings(settings: dict):
+    """Slaat kolom-instellingen voor Orders op in GitHub (JSON)."""
+    path = _orders_settings_path()
+    try:
+        content = json.dumps(settings, indent=2, sort_keys=True)
+    except Exception:
+        content = "{}"
+    _gh_put_text(path, content, "update orders_grid_settings.json")
 # ------------------------------------------------------------
-# [Einde] UI settings helpers
+# [Einde] Grid settings
 # ------------------------------------------------------------
 
 
@@ -567,7 +557,6 @@ def make_pivot_amount(df: pd.DataFrame, row_fields: list) -> pd.DataFrame:
 # Let op: eerst inloggen tonen, daarna pas data laden (ensure_state)
 user = login_panel()
 ensure_state()
-load_ui_settings()  # UI settings alvast inladen
 
 st.sidebar.title("🌿 GPC Orders Systeem")
 st.sidebar.success(f"👤 Ingelogd als **{user['name']}**")
@@ -774,7 +763,7 @@ elif page == "Orders":
     if flt_weeks:
         filtered_df = filtered_df[filtered_df["Week"].isin(flt_weeks)]
 
-    # ----- Tabel (AgGrid) – gedrag exact houden + kolombreedtes persistent -----
+    # ----- Tabel (AgGrid) – gedrag exact houden + kolombreedtes via instellingen -----
     if filtered_df.empty:
         st.info("Geen orders gevonden (controleer je filters).")
     else:
@@ -793,7 +782,36 @@ elif page == "Orders":
             .astype("string")
         )
 
+        # ===== Kolombreedtes-instellingen (permanent via GitHub) =====
         st.subheader("📋 Orders (bewerken, selecteren en verwijderen)")
+
+        settings = load_orders_grid_settings()
+        saved_widths = settings.get("column_widths", {}) if isinstance(settings, dict) else {}
+
+        with st.expander("⚙️ Kolombreedtes (Orders-tabel)"):
+            st.caption(
+                "Stel hier kolombreedtes in (pixels). Deze instellingen worden opgeslagen in GitHub "
+                "en gelden elke keer dat je de app opent."
+            )
+            default_cols = show_cols  # dezelfde volgorde als in de tabel
+            width_inputs = {}
+            for col in default_cols:
+                cur = saved_widths.get(col, 0)
+                width_inputs[col] = st.number_input(
+                    f"{col}",
+                    min_value=50,
+                    max_value=600,
+                    value=int(cur) if isinstance(cur, (int, float)) and cur > 0 else 150,
+                    step=10,
+                    key=f"width_{col}"
+                )
+            if st.button("💾 Bewaar kolombreedtes", key="save_orders_colwidths"):
+                new_settings = dict(settings) if isinstance(settings, dict) else {}
+                new_settings["column_widths"] = {k: int(v) for k, v in width_inputs.items()}
+                save_orders_grid_settings(new_settings)
+                st.success("Kolombreedtes opgeslagen. De tabel wordt opnieuw geladen.")
+                st.rerun()
+        # ============================================================
 
         grid_df = editor_df.copy()
         grid_df["_OID_keep"] = filtered_df["_OID"].values
@@ -835,18 +853,16 @@ elif page == "Orders":
 
         grid_options = gob.build()
 
-        # ------------ KOLOMBREEDTES TERUGZETTEN (ORDERS, vanuit ui_settings.json) ------------
-        ui_settings = load_ui_settings()
-        saved_widths = ui_settings.get("orders_grid_col_widths", {})
+        # ------------ Kolombreedtes toepassen vanuit settings ------------
         if isinstance(saved_widths, dict) and grid_options.get("columnDefs"):
             for col_def in grid_options["columnDefs"]:
                 try:
                     field = col_def.get("field")
                     if field in saved_widths and saved_widths[field]:
-                        col_def["width"] = saved_widths[field]
+                        col_def["width"] = int(saved_widths[field])
                 except Exception:
                     pass
-        # --------------------------------------------------------------------------------------
+        # -----------------------------------------------------------------
 
         # Dynamische hoogte
         n_rows = len(grid_df)
@@ -866,39 +882,6 @@ elif page == "Orders":
             height=grid_height,
             allow_unsafe_jscode=True,
         )
-
-        # ====== KOLOMBREEDTES OPSLAAN NA WIJZIGING (naar session_state, later naar GitHub) ======
-        try:
-            grid_state = grid_ret.get("grid_state", {})
-            col_state_list = None
-
-            if isinstance(grid_state, dict):
-                # verschillende mogelijke structuren afvangen
-                if isinstance(grid_state.get("columns"), dict) and isinstance(grid_state["columns"].get("state"), list):
-                    col_state_list = grid_state["columns"]["state"]
-                elif isinstance(grid_state.get("columns"), list):
-                    col_state_list = grid_state["columns"]
-                elif isinstance(grid_state.get("column_state"), list):
-                    col_state_list = grid_state["column_state"]
-                elif isinstance(grid_state.get("columnState"), list):
-                    col_state_list = grid_state["columnState"]
-
-            if col_state_list:
-                new_widths = {}
-                for cs in col_state_list:
-                    if not isinstance(cs, dict):
-                        continue
-                    col_id = cs.get("colId")
-                    width = cs.get("width")
-                    if col_id and isinstance(width, (int, float)):
-                        new_widths[col_id] = int(width)
-                if new_widths:
-                    ui = load_ui_settings()
-                    ui["orders_grid_col_widths"] = new_widths
-                    st.session_state["ui_settings"] = ui
-        except Exception:
-            pass
-        # ========================================================================================
 
         # ====== ROBUUST LEZEN VAN GRID-OUTPUT (fix voor ValueError) ======
         grid_data_raw = grid_ret.get("data", [])
@@ -989,11 +972,6 @@ elif page == "Orders":
 
                 st.session_state.orders = orders_base.reset_index()
                 st.session_state.products = products_base.reset_index()
-
-                # >>> UI settings (kolombreedtes) nu ook naar GitHub schrijven
-                ui = load_ui_settings()
-                save_ui_settings(ui)
-
                 save_data()
                 st.success("Wijzigingen opgeslagen.")
                 st.rerun()
