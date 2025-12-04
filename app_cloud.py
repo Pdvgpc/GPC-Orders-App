@@ -782,36 +782,11 @@ elif page == "Orders":
             .astype("string")
         )
 
-        # ===== Kolombreedtes-instellingen (permanent via GitHub) =====
         st.subheader("📋 Orders (bewerken, selecteren en verwijderen)")
 
+        # Kolom-instellingen laden
         settings = load_orders_grid_settings()
         saved_widths = settings.get("column_widths", {}) if isinstance(settings, dict) else {}
-
-        with st.expander("⚙️ Kolombreedtes (Orders-tabel)"):
-            st.caption(
-                "Stel hier kolombreedtes in (pixels). Deze instellingen worden opgeslagen in GitHub "
-                "en gelden elke keer dat je de app opent."
-            )
-            default_cols = show_cols  # dezelfde volgorde als in de tabel
-            width_inputs = {}
-            for col in default_cols:
-                cur = saved_widths.get(col, 0)
-                width_inputs[col] = st.number_input(
-                    f"{col}",
-                    min_value=50,
-                    max_value=600,
-                    value=int(cur) if isinstance(cur, (int, float)) and cur > 0 else 150,
-                    step=10,
-                    key=f"width_{col}"
-                )
-            if st.button("💾 Bewaar kolombreedtes", key="save_orders_colwidths"):
-                new_settings = dict(settings) if isinstance(settings, dict) else {}
-                new_settings["column_widths"] = {k: int(v) for k, v in width_inputs.items()}
-                save_orders_grid_settings(new_settings)
-                st.success("Kolombreedtes opgeslagen. De tabel wordt opnieuw geladen.")
-                st.rerun()
-        # ============================================================
 
         grid_df = editor_df.copy()
         grid_df["_OID_keep"] = filtered_df["_OID"].values
@@ -1087,6 +1062,31 @@ elif page == "Orders":
                 use_container_width=True,
                 disabled=sup_disabled
             )
+
+        # ===== Kolombreedtes-expander helemaal onderaan =====
+        with st.expander("⚙️ Kolombreedtes (Orders-tabel)"):
+            st.caption(
+                "Stel hier kolombreedtes in (pixels). Deze instellingen worden opgeslagen in GitHub "
+                "en gelden elke keer dat je de app opent."
+            )
+            default_cols = show_cols  # dezelfde volgorde als in de tabel
+            width_inputs = {}
+            for col in default_cols:
+                cur = saved_widths.get(col, 0)
+                width_inputs[col] = st.number_input(
+                    f"{col}",
+                    min_value=50,
+                    max_value=600,
+                    value=int(cur) if isinstance(cur, (int, float)) and cur > 0 else 150,
+                    step=10,
+                    key=f"width_{col}"
+                )
+            if st.button("💾 Bewaar kolombreedtes", key="save_orders_colwidths"):
+                new_settings = dict(settings) if isinstance(settings, dict) else {}
+                new_settings["column_widths"] = {k: int(v) for k, v in width_inputs.items()}
+                save_orders_grid_settings(new_settings)
+                st.success("Kolombreedtes opgeslagen. De tabel wordt opnieuw geladen.")
+                st.rerun()
 # ------------------------------------------------------------
 # [Einde] Orders
 # ------------------------------------------------------------
