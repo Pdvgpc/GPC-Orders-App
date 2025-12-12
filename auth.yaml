@@ -4,7 +4,10 @@ credentials:
       name: "Pieter de Vries"
       email: "pieter@greenplantcuttings.com"
       password_sha256: "1ee9d3d0ede747558b859a3a845097f90643fce34d597c18ce3a78dd28bdd2ed"
+      credentials:
+  usernames:
        bdev:
       name: "Bert de Vries"
       email: "bert@greenplantcuttings.com"
       password_sha256: "9a7e3fbb1a2a2c1b7cfe8f7e8b71b1e4e1b5e9c0a3f0e6b7f4f9c2c5e6d4a8f"
+
