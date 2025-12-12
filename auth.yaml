@@ -5,9 +5,7 @@ credentials:
       email: pieter@greenplantcuttings.com
       password_sha256: "1ee9d3d0ede747558b859a3a845097f90643fce34d597c18ce3a78dd28bdd2ed"
 
-   credentials:
-  usernames:
     bert:
-      name: "Bert de Vries"
-      email: "bert@greenplantcuttings.com"
+      name: Bert de Vries
+      email: bert@greenplantcuttings.com
       password_sha256: "e1ba8792f31d3667ddee56671385482eeb8adeaf06df3b323e88c6b9f583236c"
