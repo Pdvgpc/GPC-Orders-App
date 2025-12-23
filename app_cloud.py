@@ -709,7 +709,6 @@ elif page == "Orders":
 
     # ----- Filters -----
     with st.expander("🔎 Filters (tabel & export)"):
-        # Vrije tekst zoeken in meerdere kolommen
         q = st.text_input(
             "Zoeken (bijv. 'monstera')",
             value="",
@@ -717,7 +716,6 @@ elif page == "Orders":
         )
         st.caption("Filtert op gedeeltelijke matches (hoofdletter-ongevoelig) in Customer, Supplier, Article en Description.")
 
-        # Aanvullende keuzefilters
         f1, f2, f3, f4 = st.columns(4)
         with f1:
             flt_customer = st.multiselect(
@@ -742,7 +740,6 @@ elif page == "Orders":
 
     filtered_df = base_df.copy()
 
-    # Vrije tekstfilter toepassen
     if q.strip():
         query = q.strip()
         cols_to_search = ["Customer", "Supplier", "Article", "Description"]
@@ -751,7 +748,6 @@ elif page == "Orders":
             mask = mask | filtered_df[col].astype(str).str.contains(query, case=False, na=False)
         filtered_df = filtered_df[mask]
 
-    # Extra verfijning via keuzelijsten
     if flt_customer:
         filtered_df = filtered_df[filtered_df["Customer"].isin(flt_customer)]
     if flt_supplier:
@@ -763,13 +759,11 @@ elif page == "Orders":
     if flt_weeks:
         filtered_df = filtered_df[filtered_df["Week"].isin(flt_weeks)]
 
-    # ----- Tabel (AgGrid) – gedrag exact houden + kolombreedtes via instellingen -----
     if filtered_df.empty:
         st.info("Geen orders gevonden (controleer je filters).")
     else:
         show_cols = ["Customer","Article","Description","Quantity","Purchase Price","Sales Price","Supplier",
                      "Week","Week Start (Mon)","Year"]
-        # ook _PID meenemen zodat we productprijs kunnen bijwerken
         display_df = filtered_df[show_cols + ["_OID","_PID"]].copy()
 
         editor_df = display_df.copy()
@@ -784,24 +778,21 @@ elif page == "Orders":
 
         st.subheader("📋 Orders (bewerken, selecteren en verwijderen)")
 
-        # Kolom-instellingen laden
         settings = load_orders_grid_settings()
         saved_widths = settings.get("column_widths", {}) if isinstance(settings, dict) else {}
 
         grid_df = editor_df.copy()
         grid_df["_OID_keep"] = filtered_df["_OID"].values
-        grid_df["_PID_keep"] = filtered_df["_PID"].values   # product-id bijhouden
+        grid_df["_PID_keep"] = filtered_df["_PID"].values
 
-        # === AgGrid opties ===
         gob = GridOptionsBuilder.from_dataframe(grid_df)
 
-        # Kolommen bewerkbaar zoals afgesproken
         editable_cols = {
             "Quantity": True,
             "Week": True,
             "Year": True,
             "Sales Price": True,
-            "Purchase Price": True,     # Purchase Price bewerkbaar
+            "Purchase Price": True,
         }
         for col in grid_df.columns:
             if col in [
@@ -812,7 +803,6 @@ elif page == "Orders":
             else:
                 gob.configure_column(col, editable=editable_cols.get(col, False))
 
-        # Resizing/sort/filter + selectie
         gob.configure_grid_options(
             enableSorting=True,
             enableFilter=True,
@@ -828,7 +818,6 @@ elif page == "Orders":
 
         grid_options = gob.build()
 
-        # ------------ Kolombreedtes toepassen vanuit settings ------------
         if isinstance(saved_widths, dict) and grid_options.get("columnDefs"):
             for col_def in grid_options["columnDefs"]:
                 try:
@@ -837,9 +826,7 @@ elif page == "Orders":
                         col_def["width"] = int(saved_widths[field])
                 except Exception:
                     pass
-        # -----------------------------------------------------------------
 
-        # Dynamische hoogte
         n_rows = len(grid_df)
         row_h = grid_options.get("rowHeight", 34) or 34
         header_h = grid_options.get("headerHeight", 34) or 34
@@ -858,7 +845,6 @@ elif page == "Orders":
             allow_unsafe_jscode=True,
         )
 
-        # ====== ROBUUST LEZEN VAN GRID-OUTPUT (fix voor ValueError) ======
         grid_data_raw = grid_ret.get("data", [])
         if isinstance(grid_data_raw, pd.DataFrame):
             grid_data = grid_data_raw
@@ -885,7 +871,6 @@ elif page == "Orders":
                     selected_ids.append(int(val))
             except Exception:
                 pass
-        # ================================================================
 
         c1, c2, _ = st.columns([1,1,6])
 
@@ -901,12 +886,10 @@ elif page == "Orders":
 
         with c2:
             if st.button("💾 Wijzigingen opslaan", use_container_width=True):
-                # Basis-tabellen
                 orders_base = st.session_state.orders.set_index("id")
                 products_base = st.session_state.products.set_index("id")
 
                 for _, row in grid_data.iterrows():
-                    # ---- Orders aanpassen ----
                     oid = row.get("_OID_keep")
                     if oid is not None and not pd.isna(oid):
                         oid = int(oid)
@@ -929,7 +912,6 @@ elif page == "Orders":
                                 except Exception:
                                     pass
 
-                    # ---- Purchase Price -> products.price aanpassen ----
                     pid = row.get("_PID_keep")
                     if pid is not None and not pd.isna(pid):
                         pid = int(pid)
@@ -951,13 +933,10 @@ elif page == "Orders":
                 st.success("Wijzigingen opgeslagen.")
                 st.rerun()
 
-        # ----- Export -----
         st.markdown("### ⬇️ Export Excel (pivot per jaar+week)")
 
-        # Basis: werk op een kopie en coercen types
         export_base = filtered_df.copy()
 
-        # Zorg dat de verwachte kolommen bestaan en juiste types hebben
         if "Quantity" not in export_base.columns and "Aantal" in export_base.columns:
             export_base = export_base.rename(columns={"Aantal": "Quantity"})
 
@@ -968,7 +947,6 @@ elif page == "Orders":
         export_base["Quantity"] = pd.to_numeric(export_base.get("Quantity", pd.Series(dtype="float")),
                                                 errors="coerce").fillna(0).astype(int)
 
-        # Maak YearWeek-labels zoals 202550 (jaar 2025, week 50)
         def _mk_yw(row):
             y = row.get("Year")
             w = row.get("Week")
@@ -981,7 +959,6 @@ elif page == "Orders":
 
         export_base["YearWeek"] = export_base.apply(_mk_yw, axis=1)
 
-        # Helper: pivot op YearWeek i.p.v. Week
         def pivot_by_yearweek(df_src: pd.DataFrame, row_fields: list) -> pd.DataFrame:
             if df_src.empty:
                 return pd.DataFrame(columns=row_fields)
@@ -997,7 +974,6 @@ elif page == "Orders":
                 aggfunc="sum",
                 dropna=False
             )
-            # Kolomnamen sorteren op numerieke waarde (jaar+week)
             if isinstance(pvt.columns, pd.MultiIndex):
                 pvt.columns = [c[-1] for c in pvt.columns]
 
@@ -1011,7 +987,6 @@ elif page == "Orders":
             pvt = pvt.astype("float").where(pd.notna(pvt), None)
             pvt = pvt.reset_index()
 
-            # Rijen zonder aantallen eruit
             yw_cols = [c for c in pvt.columns if c not in row_fields]
             if yw_cols:
                 tmp = pd.DataFrame(pvt[yw_cols]).fillna(0).sum(axis=1)
@@ -1025,8 +1000,9 @@ elif page == "Orders":
 
         # Customer export (Engels)
         cust_rows = ["Customer","Article","Description","Sales Price"]
-        # Supplier export: met Customer erbij (Engels)
-        sup_rows  = ["Supplier","Article","Description","Customer"]
+
+        # Supplier export: met Customer + Purchase Price erbij (Engels)  ✅ AANGEPAST
+        sup_rows  = ["Supplier","Article","Description","Customer","Purchase Price"]
 
         need_cols_cust = [c for c in cust_rows + ["Year","Week","YearWeek","Quantity"] if c in export_base.columns]
         need_cols_sup  = [c for c in sup_rows  + ["Year","Week","YearWeek","Quantity"] if c in export_base.columns]
@@ -1063,13 +1039,12 @@ elif page == "Orders":
                 disabled=sup_disabled
             )
 
-        # ===== Kolombreedtes-expander helemaal onderaan =====
         with st.expander("⚙️ Kolombreedtes (Orders-tabel)"):
             st.caption(
                 "Stel hier kolombreedtes in (pixels). Deze instellingen worden opgeslagen in GitHub "
                 "en gelden elke keer dat je de app opent."
             )
-            default_cols = show_cols  # dezelfde volgorde als in de tabel
+            default_cols = show_cols
             width_inputs = {}
             for col in default_cols:
                 cur = saved_widths.get(col, 0)
@@ -1158,7 +1133,6 @@ elif page == "Klanten":
 elif page == "Producten":
     st.title("🪴 Producten")
 
-    # ===== Nieuw product =====
     st.subheader("➕ Nieuw product")
     with st.form("add_product_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
@@ -1200,7 +1174,6 @@ elif page == "Producten":
 
     st.markdown("---")
 
-    # ===== Veilige bewerkmodus =====
     with st.expander("🛟 Veilige bewerkmodus (als wijzigen in de tabel niet lukt)"):
         if st.session_state.products.empty:
             st.info("Geen producten om te bewerken.")
@@ -1258,7 +1231,6 @@ elif page == "Producten":
                         else:
                             st.error("Kon de rij niet uniek vinden op ID.")
 
-    # ===== Productentabel =====
     if st.session_state.products.empty:
         st.info("Nog geen producten.")
     else:
