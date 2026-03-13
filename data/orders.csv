@@ -385,3 +385,4 @@ id,customer_id,product_id,quantity,week_number,year,notes,sales_price
 716,4,68,1000,26,2026,,0.0
 717,4,70,5000,26,2026,,0.0
 718,4,72,1000,26,2026,,0.0
+719,4,74,35000,14,2026,,0.0
