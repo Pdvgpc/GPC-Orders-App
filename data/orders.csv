@@ -380,3 +380,4 @@ id,customer_id,product_id,quantity,week_number,year,notes,sales_price
 808,1,23,400,18,2026,,3.75
 809,1,23,400,22,2026,,3.75
 810,1,23,400,26,2026,,3.75
+811,2,60,150,18,2026,,0.0
