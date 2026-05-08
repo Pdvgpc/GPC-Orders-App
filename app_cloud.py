@@ -19,24 +19,14 @@ from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
 import streamlit.components.v1 as components
 
-# Gebruik st.secrets via een dict
 SEC = dict(st.secrets)
 
-# ------------------------------------------------------------
-# [Start] App Config
-# ------------------------------------------------------------
 st.set_page_config(page_title="GPC Orders Systeem", layout="wide")
 
 HERE = os.path.dirname(__file__)
-AUTH_YAML = os.path.join(HERE, "auth.yaml")  # auth.yaml in repo root
-# ------------------------------------------------------------
-# [Einde] App Config
-# ------------------------------------------------------------
+AUTH_YAML = os.path.join(HERE, "auth.yaml")
 
 
-# ------------------------------------------------------------
-# [Start] GitHub storage helpers (CSV’s in repo/branch main)
-# ------------------------------------------------------------
 def _gh_headers():
     return {
         "Authorization": f"Bearer {SEC['GITHUB_TOKEN']}",
@@ -49,24 +39,26 @@ def _gh_api(path: str) -> str:
     return f"https://api.github.com/repos/{owner}/{repo}{path}"
 
 def _gh_get_text(path_in_repo: str) -> Optional[str]:
-    """Leest een bestand (text) uit de repo. None als het niet bestaat."""
     url = _gh_api(f"/contents/{path_in_repo}")
     try:
         r = requests.get(url, headers=_gh_headers(), timeout=10)
     except Exception as e:
         st.error(f"GitHub verbinding mislukt: {e}")
         return ""
+
     if r.status_code == 200:
         data = r.json()
         return base64.b64decode(data["content"]).decode("utf-8", errors="ignore")
+
     if r.status_code == 404:
         return None
+
     st.error(f"GitHub leesfout {r.status_code}: {r.text[:200]}")
     return ""
 
 def _gh_put_text(path_in_repo: str, content_text: str, msg: str):
-    """Schrijft/maakt tekstbestand naar de repo (branch main)."""
     url = _gh_api(f"/contents/{path_in_repo}")
+
     try:
         r = requests.get(url, headers=_gh_headers(), timeout=10)
     except Exception as e:
@@ -80,6 +72,7 @@ def _gh_put_text(path_in_repo: str, content_text: str, msg: str):
         "content": base64.b64encode(content_text.encode("utf-8")).decode("ascii"),
         "branch": "main",
     }
+
     if sha:
         payload["sha"] = sha
 
@@ -93,29 +86,24 @@ def _gh_put_text(path_in_repo: str, content_text: str, msg: str):
         st.error(f"GitHub schrijffout {r2.status_code}: {r2.text[:200]}")
 
 def _gh_get_csv(path_in_repo: str) -> Optional[pd.DataFrame]:
-    """Leest CSV in als DataFrame. None wanneer het bestand niet bestaat."""
     txt = _gh_get_text(path_in_repo)
+
     if txt is None:
         return None
+
     if not txt.strip():
         return pd.DataFrame()
+
     try:
         return pd.read_csv(StringIO(txt))
     except Exception:
         return pd.DataFrame()
 
 def _gh_put_csv(path_in_repo: str, df: pd.DataFrame, msg: str):
-    """Schrijft DataFrame als CSV naar repo."""
     csv_txt = df.to_csv(index=False)
     _gh_put_text(path_in_repo, csv_txt, msg)
-# ------------------------------------------------------------
-# [Einde] GitHub storage helpers
-# ------------------------------------------------------------
 
 
-# ------------------------------------------------------------
-# [Start] Auth helpers
-# ------------------------------------------------------------
 def load_auth() -> dict:
     try:
         with open(AUTH_YAML, "r", encoding="utf-8") as f:
@@ -138,6 +126,7 @@ def login_panel():
 
     if st.button("Inloggen", type="primary"):
         rec = users.get(u)
+
         if rec:
             ok = False
 
@@ -147,8 +136,9 @@ def login_panel():
                     ok = hmac.compare_digest(entered, rec["password_sha256"])
                 except Exception:
                     ok = False
+
             elif "password_plain" in rec:
-                ok = (str(p) == str(rec["password_plain"]))
+                ok = str(p) == str(rec["password_plain"])
 
             if ok:
                 st.session_state["auth_user"] = {
@@ -164,14 +154,8 @@ def login_panel():
             st.error("Ongeldige gebruikersnaam/wachtwoord")
 
     st.stop()
-# ------------------------------------------------------------
-# [Einde] Auth helpers
-# ------------------------------------------------------------
 
 
-# ------------------------------------------------------------
-# [Start] Helpers: types, load/save, id's, date helpers
-# ------------------------------------------------------------
 def week_start_date(year: int, week: int):
     try:
         return datetime.fromisocalendar(int(year), int(week), 1).date()
@@ -180,6 +164,7 @@ def week_start_date(year: int, week: int):
 
 def coerce_columns(df: pd.DataFrame, types: dict) -> pd.DataFrame:
     df = df.copy()
+
     for col, dtype in types.items():
         if col not in df.columns:
             if dtype in ("Int64", "Int32", "int"):
@@ -198,18 +183,14 @@ def coerce_columns(df: pd.DataFrame, types: dict) -> pd.DataFrame:
                     df[col] = df[col].astype("string")
             except Exception:
                 pass
+
     return df
 
 def load_data():
-    """Laadt CSV’s uit GitHub (map uit secrets: DATA_DIR)."""
     repo_dir = SEC.get("DATA_DIR", "data")
 
-    # PRODUCTS
     g = _gh_get_csv(f"{repo_dir}/products.csv")
-    if g is None:
-        prod = pd.DataFrame(columns=["id", "name", "description", "price", "four_week_availability", "supplier"])
-    else:
-        prod = g
+    prod = pd.DataFrame(columns=["id", "name", "description", "price", "four_week_availability", "supplier"]) if g is None else g
     prod = coerce_columns(prod, {
         "id": "Int64",
         "name": "string",
@@ -220,23 +201,19 @@ def load_data():
     })
     st.session_state.products = prod
 
-    # CUSTOMERS
     g = _gh_get_csv(f"{repo_dir}/customers.csv")
-    if g is None:
-        cust = pd.DataFrame(columns=["id", "name", "email"])
-    else:
-        cust = g
-    cust = coerce_columns(cust, {"id": "Int64", "name": "string", "email": "string"})
+    cust = pd.DataFrame(columns=["id", "name", "email"]) if g is None else g
+    cust = coerce_columns(cust, {
+        "id": "Int64",
+        "name": "string",
+        "email": "string",
+    })
     st.session_state.customers = cust
 
-    # ORDERS
     g = _gh_get_csv(f"{repo_dir}/orders.csv")
-    if g is None:
-        ords = pd.DataFrame(columns=[
-            "id", "customer_id", "product_id", "quantity", "week_number", "year", "notes", "sales_price"
-        ])
-    else:
-        ords = g
+    ords = pd.DataFrame(columns=[
+        "id", "customer_id", "product_id", "quantity", "week_number", "year", "notes", "sales_price"
+    ]) if g is None else g
     ords = coerce_columns(ords, {
         "id": "Int64",
         "customer_id": "Int64",
@@ -250,12 +227,14 @@ def load_data():
     st.session_state.orders = ords
 
 def save_data():
-    """Schrijft CSV’s terug naar GitHub (branch main)."""
     repo_dir = SEC.get("DATA_DIR", "data")
+
     if "products" in st.session_state:
         _gh_put_csv(f"{repo_dir}/products.csv", st.session_state.products, "update products.csv")
+
     if "customers" in st.session_state:
         _gh_put_csv(f"{repo_dir}/customers.csv", st.session_state.customers, "update customers.csv")
+
     if "orders" in st.session_state:
         _gh_put_csv(f"{repo_dir}/orders.csv", st.session_state.orders, "update orders.csv")
 
@@ -271,11 +250,13 @@ def ensure_state():
         "four_week_availability": "Int64",
         "supplier": "string",
     })
+
     st.session_state.customers = coerce_columns(st.session_state.customers, {
         "id": "Int64",
         "name": "string",
         "email": "string",
     })
+
     st.session_state.orders = coerce_columns(st.session_state.orders, {
         "id": "Int64",
         "customer_id": "Int64",
@@ -290,21 +271,24 @@ def ensure_state():
 def next_id(df: pd.DataFrame) -> int:
     if df.empty or "id" not in df.columns:
         return 1
+
     try:
         return int(pd.to_numeric(df["id"], errors="coerce").fillna(0).max()) + 1
     except Exception:
         return 1
 
 def label_product_with_supplier(prod_id: Optional[int]) -> str:
-    """Label voor selectbox: 'Product — Leverancier'."""
     try:
         if prod_id is None:
             return ""
+
         pid = int(prod_id)
         df = st.session_state.products
         row = df.loc[pd.to_numeric(df["id"], errors="coerce") == pid]
+
         if row.empty:
             return ""
+
         name = str(row.iloc[0]["name"] or "")
         supplier = str(row.iloc[0]["supplier"] or "")
         return f"{name} — {supplier}" if supplier else name
@@ -315,19 +299,13 @@ def fmt_select_from_df(id_value, df_id_name: pd.DataFrame) -> str:
     try:
         if id_value is None:
             return ""
+
         iid = int(id_value)
         m = df_id_name.loc[pd.to_numeric(df_id_name["id"], errors="coerce") == iid, "name"]
         return "" if m.empty else str(m.iloc[0])
     except Exception:
         return ""
-# ------------------------------------------------------------
-# [Einde] Helpers: types, load/save, id's, date helpers
-# ------------------------------------------------------------
 
-
-# ------------------------------------------------------------
-# [Start] UI helper: Enter = volgende veld / submit
-# ------------------------------------------------------------
 def enable_enter_navigation(submit_button_label: str):
     components.html(f"""
     <script>
@@ -368,7 +346,7 @@ def enable_enter_navigation(submit_button_label: str):
       function isSelectOpenOrFocused(el) {{
         try {{
           const inCombobox = el && (el.closest('[data-baseweb="select"]') || el.closest('[role="combobox"]'));
-          const popupOpen  = root.querySelector('[role="listbox"]');
+          const popupOpen = root.querySelector('[role="listbox"]');
           return !!(inCombobox || popupOpen);
         }} catch(e) {{ return false; }}
       }}
@@ -385,31 +363,19 @@ def enable_enter_navigation(submit_button_label: str):
     }})();
     </script>
     """, height=0)
-# ------------------------------------------------------------
-# [Einde] UI helper
-# ------------------------------------------------------------
 
-
-# ------------------------------------------------------------
-# [Start] Helpers: geld-invoer (komma/punt, 2 dec)
-# ------------------------------------------------------------
 def money_input(label: str, value: float = 0.0, key: str = None, help: str = None):
     default_txt = f"{value:.2f}".replace(".", ",")
     raw = st.text_input(label, value=default_txt, key=key, help=help)
     txt = (raw or "").strip().replace("€", "").replace(" ", "").replace(",", ".")
+
     try:
         val = round(float(txt), 2)
         return val, True
     except Exception:
         return value, False
-# ------------------------------------------------------------
-# [Einde] Helpers: geld-invoer
-# ------------------------------------------------------------
 
 
-# ------------------------------------------------------------
-# [Start] Helpers: Orders weergave + Excel export
-# ------------------------------------------------------------
 def build_orders_display_df() -> pd.DataFrame:
     orders = st.session_state.orders.copy()
     products = st.session_state.products.copy()
@@ -421,7 +387,6 @@ def build_orders_display_df() -> pd.DataFrame:
             "Week", "Week Start (Mon)", "Year", "_OID", "_CID", "_PID"
         ])
 
-    # Join producten
     if not products.empty:
         prod = products.rename(columns={"id": "_PID_join"})
         orders = orders.merge(
@@ -437,7 +402,6 @@ def build_orders_display_df() -> pd.DataFrame:
         orders["price"] = None
         orders["supplier"] = ""
 
-    # Join klanten
     if not customers.empty:
         cust = customers.rename(columns={"id": "_CID_join"})
         orders = orders.merge(
@@ -470,6 +434,7 @@ def build_orders_display_df() -> pd.DataFrame:
         "Customer", "Article", "Description", "Quantity", "Purchase Price", "Sales Price", "Supplier",
         "Week", "Week Start (Mon)", "Year", "_OID", "_CID", "_PID"
     ]
+
     df = orders.reindex(columns=view_cols).copy()
 
     for c in ["Customer", "Article", "Description", "Supplier"]:
@@ -517,6 +482,7 @@ def _excel_export_bytes(df: pd.DataFrame, title: str) -> BytesIO:
 
     max_row = ws.max_row
     max_col = ws.max_column
+
     for r in range(1, max_row + 1):
         for c in range(1, max_col + 1):
             cell = ws.cell(row=r, column=c)
@@ -535,36 +501,47 @@ def _excel_export_bytes(df: pd.DataFrame, title: str) -> BytesIO:
     wb.save(buf)
     buf.seek(0)
     return buf
-# ------------------------------------------------------------
-# [Einde] Helpers: Orders weergave + Excel export
-# ------------------------------------------------------------
 
 
 # ------------------------------------------------------------
-# [Start] Init state + Sidebar
+# Init state + Top menu
 # ------------------------------------------------------------
 user = login_panel()
 ensure_state()
 
-st.sidebar.title("🌿 GPC Orders Systeem")
-st.sidebar.success(f"👤 Ingelogd als **{user['name']}**")
+st.markdown("## 🌿 GPC Orders Systeem")
 
-page = st.sidebar.radio("Navigatie", ["Dashboard", "Orders", "Klanten", "Producten"])
+top_left, top_right = st.columns([5, 2])
 
-if st.sidebar.button("Uitloggen"):
-    st.session_state["auth_user"] = None
-    st.rerun()
+with top_left:
+    page = st.radio(
+        "Navigatie",
+        ["Dashboard", "Orders", "Klanten", "Producten"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="top_navigation"
+    )
 
-if st.sidebar.button("💾 Nu opslaan"):
-    save_data()
-    st.sidebar.success("Opgeslagen.")
+with top_right:
+    st.caption(f"👤 Ingelogd als **{user['name']}**")
+
+    btn_save, btn_logout = st.columns(2)
+
+    with btn_save:
+        if st.button("💾 Opslaan", use_container_width=True):
+            save_data()
+            st.success("Opgeslagen.")
+
+    with btn_logout:
+        if st.button("Uitloggen", use_container_width=True):
+            st.session_state["auth_user"] = None
+            st.rerun()
+
+st.markdown("---")
+
+
 # ------------------------------------------------------------
-# [Einde] Init state + Sidebar
-# ------------------------------------------------------------
-
-
-# ------------------------------------------------------------
-# [Start] Dashboard
+# Dashboard
 # ------------------------------------------------------------
 if page == "Dashboard":
     st.title("📊 Dashboard")
@@ -580,38 +557,41 @@ if page == "Dashboard":
             .rename(columns={"name": "Product"})
             .drop(columns=["id_y"], errors="ignore")
         )
+
         jaren = sorted(df["year"].dropna().astype(int).unique().tolist())
+
         sel_jaar = st.selectbox(
             "Jaar",
             jaren,
             index=jaren.index(datetime.now().year) if datetime.now().year in jaren else 0
         )
+
         per_prod = (
             df[df["year"] == sel_jaar]
-            .groupby("Product", dropna=False)["quantity"].sum()
+            .groupby("Product", dropna=False)["quantity"]
+            .sum()
             .reset_index(name="Totaal verkocht")
             .sort_values("Totaal verkocht", ascending=False)
         )
+
         st.markdown(f"### Orders per product in {sel_jaar}")
         st.dataframe(per_prod, use_container_width=True)
-# ------------------------------------------------------------
-# [Einde] Dashboard
-# ------------------------------------------------------------
 
 
 # ------------------------------------------------------------
-# [Start] Orders
+# Orders
 # ------------------------------------------------------------
 elif page == "Orders":
     st.title("📦 Orders")
 
-    # ----- Nieuwe order -----
     st.subheader("➕ Nieuwe order")
+
     if st.session_state.customers.empty or st.session_state.products.empty:
         st.warning("Je hebt klanten én producten nodig om een order toe te voegen.")
     else:
         with st.form("add_order_form", clear_on_submit=True):
             cA, cB = st.columns(2)
+
             with cA:
                 cust_ids = st.session_state.customers["id"].dropna().astype(int).tolist()
                 prod_ids = st.session_state.products["id"].dropna().astype(int).tolist()
@@ -624,16 +604,14 @@ elif page == "Orders":
                     "Klant *",
                     options=cust_options,
                     format_func=lambda i: "" if i is None else fmt_select_from_df(i, st.session_state.customers),
-                    index=cust_index,
-                    help="Tip: gebruik ↑/↓ en Enter om te kiezen"
+                    index=cust_index
                 )
 
                 sel_product = st.selectbox(
                     "Artikel (product) *",
                     options=[None] + prod_ids,
                     format_func=lambda i: "" if i is None else label_product_with_supplier(i),
-                    index=0,
-                    help="Tip: gebruik ↑/↓ en Enter om te kiezen"
+                    index=0
                 )
 
                 amount = st.number_input("Aantal *", min_value=1, step=1, value=1)
@@ -643,8 +621,9 @@ elif page == "Orders":
                     "Verkoopprijs (optioneel)",
                     value=0.00,
                     key="oi_sales_price",
-                    help="Gebruik 12,34 of 12.34 (2 decimalen)."
+                    help="Gebruik 12,34 of 12.34."
                 )
+
                 weeks_txt = st.text_input("Weeknummers * (komma gescheiden, bijv. 4,8,12)", value="")
                 jaar = st.number_input("Jaar *", min_value=2020, max_value=2100, step=1, value=datetime.now().year)
 
@@ -653,14 +632,18 @@ elif page == "Orders":
 
             if submitted:
                 errors = []
+
                 if sel_customer is None:
                     errors.append("Kies een klant.")
+
                 if sel_product is None:
                     errors.append("Kies een product.")
+
                 if not sp_ok:
                     errors.append("Verkoopprijs is ongeldig. Gebruik 12,34 of 12.34.")
 
                 weken, bad = [], []
+
                 if not weeks_txt.strip():
                     errors.append("Vul ten minste één weeknummer in.")
                 else:
@@ -675,6 +658,7 @@ elif page == "Orders":
                             bad.append(p)
 
                 weken = sorted(list(dict.fromkeys(weken)))
+
                 if bad:
                     errors.append(f"Ongeldige weeknummers: {', '.join(bad)} (toegestaan: 1..53)")
 
@@ -684,6 +668,7 @@ elif page == "Orders":
                 else:
                     base_id = next_id(st.session_state.orders)
                     rows = []
+
                     for idx, w in enumerate(weken):
                         rows.append({
                             "id": base_id + idx,
@@ -699,6 +684,7 @@ elif page == "Orders":
                         [st.session_state.orders, pd.DataFrame(rows)],
                         ignore_index=True
                     )
+
                     st.session_state["last_customer_id"] = int(sel_customer)
                     save_data()
                     st.success(f"Toegevoegd: {len(rows)} order(s) voor weken: {', '.join(map(str, weken))}")
@@ -706,66 +692,70 @@ elif page == "Orders":
 
     st.markdown("---")
 
-    # ----- Basis weergave -----
     base_df = build_orders_display_df()
 
-    # ----- Filters -----
     with st.expander("🔎 Filters (tabel & export)"):
         q = st.text_input(
-            "Zoeken (bijv. 'monstera')",
+            "Zoeken",
             value="",
             placeholder="Zoek in Customer, Supplier, Article of Description…"
         )
-        st.caption("Filtert op gedeeltelijke matches (hoofdletter-ongevoelig) in Customer, Supplier, Article en Description.")
 
         f1, f2, f3, f4 = st.columns(4)
+
         with f1:
             flt_customer = st.multiselect(
-                "Customer (optioneel)",
+                "Customer",
                 options=sorted(base_df["Customer"].dropna().astype(str).unique().tolist())
             )
+
         with f2:
             flt_supplier = st.multiselect(
-                "Supplier (optioneel)",
+                "Supplier",
                 options=sorted(base_df["Supplier"].dropna().astype(str).unique().tolist())
             )
+
         with f3:
             flt_article = st.multiselect(
-                "Article (optioneel)",
+                "Article",
                 options=sorted(base_df["Article"].dropna().astype(str).unique().tolist())
             )
+
         with f4:
             unique_years = sorted(base_df["Year"].dropna().astype(int).unique().tolist())
-            flt_years = st.multiselect("Year (optioneel)", options=unique_years)
+            flt_years = st.multiselect("Year", options=unique_years)
 
             unique_weeks = sorted(base_df["Week"].dropna().astype(int).unique().tolist())
-            flt_weeks = st.multiselect("Week (optioneel)", options=unique_weeks)
+            flt_weeks = st.multiselect("Week", options=unique_weeks)
 
     filtered_df = base_df.copy()
 
     if q.strip():
         query = q.strip()
-        cols_to_search = ["Customer", "Supplier", "Article", "Description"]
         mask = False
-        for col in cols_to_search:
+        for col in ["Customer", "Supplier", "Article", "Description"]:
             mask = mask | filtered_df[col].astype(str).str.contains(query, case=False, na=False)
         filtered_df = filtered_df[mask]
 
     if flt_customer:
         filtered_df = filtered_df[filtered_df["Customer"].isin(flt_customer)]
+
     if flt_supplier:
         filtered_df = filtered_df[filtered_df["Supplier"].isin(flt_supplier)]
+
     if flt_article:
         filtered_df = filtered_df[filtered_df["Article"].isin(flt_article)]
+
     if flt_years:
         filtered_df = filtered_df[filtered_df["Year"].isin(flt_years)]
+
     if flt_weeks:
         filtered_df = filtered_df[filtered_df["Week"].isin(flt_weeks)]
 
     if filtered_df.empty:
-        st.info("Geen orders gevonden (controleer je filters).")
+        st.info("Geen orders gevonden.")
     else:
-        st.subheader("📋 Orders (bewerken, selecteren en verwijderen)")
+        st.subheader("📋 Orders")
 
         editor_df = filtered_df.copy()
         editor_df.insert(0, "Selecteer", False)
@@ -780,7 +770,6 @@ elif page == "Orders":
         editor_df["Quantity"] = pd.to_numeric(editor_df["Quantity"], errors="coerce").fillna(0).astype(int)
         editor_df["Week"] = pd.to_numeric(editor_df["Week"], errors="coerce").fillna(0).astype(int)
         editor_df["Year"] = pd.to_numeric(editor_df["Year"], errors="coerce").fillna(0).astype(int)
-
         editor_df["Purchase Price"] = pd.to_numeric(editor_df["Purchase Price"], errors="coerce")
         editor_df["Sales Price"] = pd.to_numeric(editor_df["Sales Price"], errors="coerce")
 
@@ -810,16 +799,16 @@ elif page == "Orders":
             num_rows="fixed",
             column_config={
                 "Selecteer": st.column_config.CheckboxColumn(),
-                "Customer": st.column_config.TextColumn("Customer", disabled=True),
-                "Article": st.column_config.TextColumn("Article", disabled=True),
-                "Description": st.column_config.TextColumn("Description", disabled=True),
-                "Quantity": st.column_config.NumberColumn("Quantity", min_value=0, step=1),
-                "Purchase Price": st.column_config.NumberColumn("Purchase Price", format="%.4f"),
-                "Sales Price": st.column_config.NumberColumn("Sales Price", format="%.2f"),
-                "Supplier": st.column_config.TextColumn("Supplier", disabled=True),
-                "Week": st.column_config.NumberColumn("Week", min_value=1, max_value=53, step=1),
-                "Week Start (Mon)": st.column_config.DateColumn("Week Start (Mon)", disabled=True),
-                "Year": st.column_config.NumberColumn("Year", min_value=2020, max_value=2100, step=1),
+                "Customer": st.column_config.TextColumn(disabled=True),
+                "Article": st.column_config.TextColumn(disabled=True),
+                "Description": st.column_config.TextColumn(disabled=True),
+                "Quantity": st.column_config.NumberColumn(min_value=0, step=1),
+                "Purchase Price": st.column_config.NumberColumn(format="%.4f"),
+                "Sales Price": st.column_config.NumberColumn(format="%.2f"),
+                "Supplier": st.column_config.TextColumn(disabled=True),
+                "Week": st.column_config.NumberColumn(min_value=1, max_value=53, step=1),
+                "Week Start (Mon)": st.column_config.DateColumn(disabled=True),
+                "Year": st.column_config.NumberColumn(min_value=2020, max_value=2100, step=1),
                 "Order ID": None,
                 "Customer ID": None,
                 "Product ID": None,
@@ -858,6 +847,7 @@ elif page == "Orders":
 
                         if pd.notna(oid):
                             oid = int(oid)
+
                             if oid in orders_base.index:
                                 qty = pd.to_numeric(row.get("Quantity"), errors="coerce")
                                 week = pd.to_numeric(row.get("Week"), errors="coerce")
@@ -871,8 +861,10 @@ elif page == "Orders":
 
                         if pd.notna(pid):
                             pid = int(pid)
+
                             if pid in products_base.index:
                                 purchase_price = pd.to_numeric(row.get("Purchase Price"), errors="coerce")
+
                                 if not pd.isna(purchase_price):
                                     products_base.at[pid, "price"] = round(float(purchase_price), 4)
 
@@ -886,33 +878,21 @@ elif page == "Orders":
                 except Exception as e:
                     st.error(f"Opslaan mislukt: {e}")
 
-        st.markdown("### ⬇️ Export Excel (pivot per jaar+week)")
+        st.markdown("### ⬇️ Export Excel")
 
         export_base = filtered_df.copy()
 
-        if "Quantity" not in export_base.columns and "Aantal" in export_base.columns:
-            export_base = export_base.rename(columns={"Aantal": "Quantity"})
-
-        export_base["Week"] = pd.to_numeric(
-            export_base.get("Week", pd.Series(dtype="Int64")),
-            errors="coerce"
-        ).astype("Int64")
-
-        export_base["Year"] = pd.to_numeric(
-            export_base.get("Year", pd.Series(dtype="Int64")),
-            errors="coerce"
-        ).astype("Int64")
-
-        export_base["Quantity"] = pd.to_numeric(
-            export_base.get("Quantity", pd.Series(dtype="float")),
-            errors="coerce"
-        ).fillna(0).astype(int)
+        export_base["Week"] = pd.to_numeric(export_base.get("Week", pd.Series(dtype="Int64")), errors="coerce").astype("Int64")
+        export_base["Year"] = pd.to_numeric(export_base.get("Year", pd.Series(dtype="Int64")), errors="coerce").astype("Int64")
+        export_base["Quantity"] = pd.to_numeric(export_base.get("Quantity", pd.Series(dtype="float")), errors="coerce").fillna(0).astype(int)
 
         def _mk_yw(row):
             y = row.get("Year")
             w = row.get("Week")
+
             if pd.isna(y) or pd.isna(w):
                 return None
+
             try:
                 return f"{int(y)}{int(w):02d}"
             except Exception:
@@ -926,6 +906,7 @@ elif page == "Orders":
 
             need = [c for c in row_fields + ["YearWeek", "Quantity"] if c in df_src.columns]
             df = df_src[need].copy()
+
             if df.empty:
                 return pd.DataFrame(columns=row_fields)
 
@@ -941,6 +922,7 @@ elif page == "Orders":
                 pvt.columns = [c[-1] for c in pvt.columns]
 
             cols = [c for c in pvt.columns if c is not None]
+
             try:
                 cols_sorted = sorted(cols, key=lambda x: int(x))
             except Exception:
@@ -951,6 +933,7 @@ elif page == "Orders":
             pvt = pvt.reset_index()
 
             yw_cols = [c for c in pvt.columns if c not in row_fields]
+
             if yw_cols:
                 tmp = pd.DataFrame(pvt[yw_cols]).fillna(0).sum(axis=1)
                 pvt = pvt[tmp > 0]
@@ -964,14 +947,11 @@ elif page == "Orders":
         cust_rows = ["Customer", "Article", "Description", "Sales Price"]
         sup_rows = ["Supplier", "Article", "Description", "Customer", "Purchase Price"]
 
-        need_cols_cust = [c for c in cust_rows + ["Year", "Week", "YearWeek", "Quantity"] if c in export_base.columns]
-        need_cols_sup = [c for c in sup_rows + ["Year", "Week", "YearWeek", "Quantity"] if c in export_base.columns]
+        cust_df = export_base[[c for c in cust_rows + ["YearWeek", "Quantity"] if c in export_base.columns]].copy()
+        sup_df = export_base[[c for c in sup_rows + ["YearWeek", "Quantity"] if c in export_base.columns]].copy()
 
-        cust_df = export_base[need_cols_cust].copy() if need_cols_cust else pd.DataFrame(columns=cust_rows + ["YearWeek", "Quantity"])
-        sup_df = export_base[need_cols_sup].copy() if need_cols_sup else pd.DataFrame(columns=sup_rows + ["YearWeek", "Quantity"])
-
-        cust_pivot = pivot_by_yearweek(cust_df, cust_rows) if not cust_df.empty else pd.DataFrame(columns=cust_rows)
-        sup_pivot = pivot_by_yearweek(sup_df, sup_rows) if not sup_df.empty else pd.DataFrame(columns=sup_rows)
+        cust_pivot = pivot_by_yearweek(cust_df, cust_rows)
+        sup_pivot = pivot_by_yearweek(sup_df, sup_rows)
 
         cust_disabled = cust_pivot.empty
         sup_disabled = sup_pivot.empty
@@ -980,9 +960,10 @@ elif page == "Orders":
         sup_file = _excel_export_bytes(sup_pivot, f"GPC Orders {datetime.now().year}") if not sup_disabled else None
 
         e1, e2 = st.columns(2)
+
         with e1:
             st.download_button(
-                "⬇️ Export Excel (Customer: Jaar+Week)",
+                "⬇️ Export Excel Customer",
                 data=cust_file.getvalue() if cust_file else b"",
                 file_name=f"GPC_Orders_Customer_{datetime.now().year}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -992,37 +973,47 @@ elif page == "Orders":
 
         with e2:
             st.download_button(
-                "⬇️ Export Excel (Supplier + Customer: Jaar+Week)",
+                "⬇️ Export Excel Supplier",
                 data=sup_file.getvalue() if sup_file else b"",
                 file_name=f"GPC_Orders_Supplier_{datetime.now().year}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
                 disabled=sup_disabled
             )
-# ------------------------------------------------------------
-# [Einde] Orders
-# ------------------------------------------------------------
 
 
 # ------------------------------------------------------------
-# [Start] Klanten
+# Klanten
 # ------------------------------------------------------------
 elif page == "Klanten":
     st.title("👥 Klanten")
 
     st.subheader("➕ Nieuwe klant")
+
     with st.form("add_customer_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
+
         with c1:
             name = st.text_input("Naam *")
+
         with c2:
             email = st.text_input("E-mail")
+
         enable_enter_navigation("Klant toevoegen")
         ok = st.form_submit_button("Klant toevoegen")
 
     if ok and name.strip():
-        new_row = {"id": next_id(st.session_state.customers), "name": name.strip(), "email": email.strip()}
-        st.session_state.customers = pd.concat([st.session_state.customers, pd.DataFrame([new_row])], ignore_index=True)
+        new_row = {
+            "id": next_id(st.session_state.customers),
+            "name": name.strip(),
+            "email": email.strip()
+        }
+
+        st.session_state.customers = pd.concat(
+            [st.session_state.customers, pd.DataFrame([new_row])],
+            ignore_index=True
+        )
+
         save_data()
         st.success(f"Klant '{name}' toegevoegd.")
         st.rerun()
@@ -1032,9 +1023,16 @@ elif page == "Klanten":
     if st.session_state.customers.empty:
         st.info("Nog geen klanten.")
     else:
-        view = st.session_state.customers.copy().rename(columns={"id": "ID", "name": "Naam", "email": "E-mail"})
+        view = st.session_state.customers.copy().rename(columns={
+            "id": "ID",
+            "name": "Naam",
+            "email": "E-mail"
+        })
+
         view.insert(0, "Selecteer", False)
+
         st.subheader("✏️ Bewerken & Verwijderen")
+
         edited = st.data_editor(
             view,
             use_container_width=True,
@@ -1051,16 +1049,28 @@ elif page == "Klanten":
 
         if st.button("💾 Wijzigingen opslaan (Klanten)"):
             try:
-                to_save = edited.drop(columns=["Selecteer"]).rename(columns={"ID": "id", "Naam": "name", "E-mail": "email"})
-                to_save = coerce_columns(to_save, {"id": "int", "name": "str", "email": "str"})
+                to_save = edited.drop(columns=["Selecteer"]).rename(columns={
+                    "ID": "id",
+                    "Naam": "name",
+                    "E-mail": "email"
+                })
+
+                to_save = coerce_columns(to_save, {
+                    "id": "int",
+                    "name": "str",
+                    "email": "str"
+                })
+
                 st.session_state.customers = to_save
                 save_data()
                 st.success("Klant-wijzigingen opgeslagen.")
                 st.rerun()
+
             except Exception as e:
                 st.error(f"Opslaan mislukt: {e}")
 
         sel_ids = edited.loc[edited["Selecteer"] == True, "ID"].tolist()
+
         if st.button("🗑️ Verwijder geselecteerde klanten"):
             if not sel_ids:
                 st.warning("Selecteer eerst één of meer klanten.")
@@ -1068,46 +1078,52 @@ elif page == "Klanten":
                 st.session_state.customers = st.session_state.customers[
                     ~st.session_state.customers["id"].isin(sel_ids)
                 ]
+
                 save_data()
                 st.success(f"Verwijderd: {sel_ids}")
                 st.rerun()
-# ------------------------------------------------------------
-# [Einde] Klanten
-# ------------------------------------------------------------
 
 
 # ------------------------------------------------------------
-# [Start] Producten
+# Producten
 # ------------------------------------------------------------
 elif page == "Producten":
     st.title("🪴 Producten")
 
     st.subheader("➕ Nieuw product")
+
     with st.form("add_product_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
+
         with c1:
             name = st.text_input("Productnaam *")
+
         with c2:
             price, price_ok = money_input(
                 "Inkoopprijs (€)",
                 value=0.00,
                 key="pi_price",
-                help="Gebruik 12,34 of 12.34 (2 decimalen)."
+                help="Gebruik 12,34 of 12.34."
             )
             fourw = st.number_input("Beschikbaarheid (4 weken)", min_value=0, value=0, step=1)
             supplier = st.text_input("Leverancier *")
             description = st.text_area("Omschrijving")
+
         enable_enter_navigation("Product toevoegen")
         ok = st.form_submit_button("Product toevoegen")
 
     if ok:
         errs = []
+
         if not name.strip():
             errs.append("Vul een productnaam in.")
+
         if not supplier.strip():
             errs.append("Vul een leverancier in.")
+
         if not price_ok:
             errs.append("Inkoopprijs is ongeldig. Gebruik 12,34 of 12.34.")
+
         if errs:
             for e in errs:
                 st.error(e)
@@ -1120,17 +1136,19 @@ elif page == "Producten":
                 "four_week_availability": int(fourw),
                 "supplier": supplier.strip(),
             }
+
             st.session_state.products = pd.concat(
                 [st.session_state.products, pd.DataFrame([new_row])],
-                ignore_index=True,
+                ignore_index=True
             )
+
             save_data()
             st.success(f"Product '{name.strip()}' toegevoegd.")
             st.rerun()
 
     st.markdown("---")
 
-    with st.expander("🛟 Veilige bewerkmodus (als wijzigen in de tabel niet lukt)"):
+    with st.expander("🛟 Veilige bewerkmodus"):
         if st.session_state.products.empty:
             st.info("Geen producten om te bewerken.")
         else:
@@ -1143,16 +1161,20 @@ elif page == "Producten":
                 "four_week_availability": "int",
                 "supplier": "str"
             })
+
             _pv["label"] = _pv.apply(lambda r: f"{r['name']} ({r['supplier']}) [ID {r['id']}]", axis=1)
             _labels = _pv["label"].tolist()
             _id_by_label = dict(zip(_pv["label"], _pv["id"]))
+
             sel_label = st.selectbox("Kies product", options=_labels)
             sel_id = _id_by_label.get(sel_label)
 
             if sel_id is not None:
                 row = _pv.loc[_pv["id"] == sel_id].iloc[0]
+
                 with st.form(f"safe_edit_product_{sel_id}", clear_on_submit=False):
                     c1, c2 = st.columns(2)
+
                     with c1:
                         new_name = st.text_input("Naam", value=row["name"])
                         new_supplier = st.text_input("Leverancier", value=row["supplier"])
@@ -1162,6 +1184,7 @@ elif page == "Producten":
                             step=1,
                             value=int(row["four_week_availability"])
                         )
+
                     with c2:
                         new_price, ok_price = money_input(
                             "Inkoopprijs (€)",
@@ -1170,22 +1193,28 @@ elif page == "Producten":
                             help="Gebruik 12,34 of 12.34"
                         )
                         new_desc = st.text_area("Omschrijving", value=row["description"] or "")
+
                     submit_safe = st.form_submit_button("💾 Opslaan (veilige modus)")
 
                 if submit_safe:
                     errs = []
+
                     if not new_name.strip():
                         errs.append("Naam mag niet leeg zijn.")
+
                     if not new_supplier.strip():
                         errs.append("Leverancier mag niet leeg zijn.")
+
                     if not ok_price:
                         errs.append("Inkoopprijs is ongeldig.")
+
                     if errs:
                         for e in errs:
                             st.error(e)
                     else:
                         base = st.session_state.products.copy()
                         idx = base.index[base["id"] == sel_id]
+
                         if len(idx) == 1:
                             i = idx[0]
                             base.at[i, "name"] = new_name.strip()
@@ -1193,6 +1222,7 @@ elif page == "Producten":
                             base.at[i, "four_week_availability"] = int(new_fourw)
                             base.at[i, "description"] = (new_desc or "").strip()
                             base.at[i, "price"] = float(new_price)
+
                             st.session_state.products = base
                             save_data()
                             st.success("Product bijgewerkt en opgeslagen ✅")
@@ -1212,6 +1242,7 @@ elif page == "Producten":
             "four_week_availability": "int",
             "supplier": "str"
         })
+
         prod_view = prod_view.rename(columns={
             "id": "ID",
             "name": "Naam",
@@ -1220,13 +1251,14 @@ elif page == "Producten":
             "four_week_availability": "Beschikbaarheid (4w)",
             "supplier": "Leverancier"
         })
+
         prod_view.insert(0, "Selecteer", False)
         prod_view["ID"] = pd.to_numeric(prod_view["ID"], errors="coerce").fillna(0).astype(int)
-        prod_view["Beschikbaarheid (4w)"] = pd.to_numeric(
-            prod_view["Beschikbaarheid (4w)"], errors="coerce"
-        ).fillna(0).astype(int)
+        prod_view["Beschikbaarheid (4w)"] = pd.to_numeric(prod_view["Beschikbaarheid (4w)"], errors="coerce").fillna(0).astype(int)
+
         for _c in ["Naam", "Omschrijving", "Leverancier"]:
             prod_view[_c] = prod_view[_c].astype("string").fillna("")
+
         prod_view["Inkoopprijs"] = (
             pd.to_numeric(prod_view["Inkoopprijs"], errors="coerce")
             .apply(lambda v: "" if pd.isna(v) else f"{float(v):.2f}".replace(".", ","))
@@ -1234,6 +1266,7 @@ elif page == "Producten":
         )
 
         st.subheader("✏️ Bewerken & Verwijderen")
+
         edited = st.data_editor(
             prod_view,
             use_container_width=True,
@@ -1252,6 +1285,7 @@ elif page == "Producten":
         )
 
         c1, c2 = st.columns(2)
+
         with c1:
             if st.button("💾 Wijzigingen opslaan (Producten)", use_container_width=True):
                 try:
@@ -1263,9 +1297,11 @@ elif page == "Producten":
                         "Beschikbaarheid (4w)": "four_week_availability",
                         "Leverancier": "supplier"
                     })
+
                     if "price" in to_save.columns:
                         to_save["price"] = to_save["price"].astype(str).str.replace(",", ".", regex=False)
                         to_save["price"] = pd.to_numeric(to_save["price"], errors="coerce")
+
                     to_save = coerce_columns(to_save, {
                         "id": "int",
                         "name": "str",
@@ -1274,15 +1310,18 @@ elif page == "Producten":
                         "four_week_availability": "int",
                         "supplier": "str"
                     })
+
                     st.session_state.products = to_save
                     save_data()
                     st.success("Product-wijzigingen opgeslagen.")
                     st.rerun()
+
                 except Exception as e:
                     st.error(f"Opslaan mislukt: {e}")
 
         with c2:
             del_ids = edited.loc[edited["Selecteer"] == True, "ID"].tolist()
+
             if st.button("🗑️ Verwijder geselecteerde producten", use_container_width=True):
                 if not del_ids:
                     st.warning("Selecteer eerst één of meer producten.")
@@ -1290,6 +1329,7 @@ elif page == "Producten":
                     st.session_state.products = st.session_state.products[
                         ~st.session_state.products["id"].isin(del_ids)
                     ]
+
                     save_data()
                     st.success(f"Verwijderd: {del_ids}")
                     st.rerun()
@@ -1297,6 +1337,3 @@ elif page == "Producten":
     with st.expander("🛠️ Reparatie / import-check voor products.csv (GitHub)"):
         st.info("Hier kun je het productbestand controleren of repareren als import mislukt is.")
         st.markdown("*(Alleen zichtbaar op de pagina ‘Producten’)*")
-# ------------------------------------------------------------
-# [Einde] Producten
-# ------------------------------------------------------------
