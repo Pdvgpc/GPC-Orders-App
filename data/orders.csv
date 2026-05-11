@@ -330,3 +330,4 @@ id,customer_id,product_id,quantity,week_number,year,notes,sales_price
 823,5,97,100,22,2026,,0.0
 824,5,98,100,22,2026,,0.01
 825,5,100,100,22,2026,,0.0
+826,5,101,100,22,2026,,0.0
