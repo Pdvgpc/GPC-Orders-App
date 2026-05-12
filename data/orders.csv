@@ -348,3 +348,4 @@ id,customer_id,product_id,quantity,week_number,year,notes,sales_price
 841,1,50,3000,2,2027,,0.19
 842,1,50,3300,6,2027,,0.19
 843,1,50,2900,10,2027,,0.19
+844,1,50,2200,14,2027,,0.19
