@@ -23,6 +23,89 @@ SEC = dict(st.secrets)
 
 st.set_page_config(page_title="GPC Orders Systeem", layout="wide")
 
+# ------------------------------------------------------------
+# [Start] Layout styling
+# ------------------------------------------------------------
+st.markdown("""
+<style>
+    .block-container {
+        padding-top: 1.2rem;
+        padding-bottom: 2rem;
+        max-width: 96%;
+    }
+
+    div[data-testid="stVerticalBlock"] > div:has(.gpc-card) {
+        border: 1px solid rgba(49, 63, 54, 0.18);
+        border-radius: 16px;
+        padding: 1.15rem 1.25rem;
+        background: rgba(255, 255, 255, 0.72);
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+    }
+
+    .gpc-topbar {
+        padding: 22px 26px;
+        border-radius: 18px;
+        background: linear-gradient(135deg, #123524 0%, #1f5137 48%, #2d6a4f 100%);
+        color: white;
+        margin-bottom: 18px;
+        box-shadow: 0 14px 34px rgba(18, 53, 36, 0.20);
+    }
+
+    .gpc-topbar h1 {
+        margin: 0;
+        font-size: 2rem;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+    }
+
+    .gpc-topbar p {
+        margin: 6px 0 0 0;
+        opacity: 0.88;
+        font-size: 0.98rem;
+    }
+
+    .gpc-section-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .gpc-muted {
+        color: #64748b;
+        font-size: 0.9rem;
+        margin-top: -0.25rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .stButton > button {
+        border-radius: 10px;
+        font-weight: 600;
+    }
+
+    div[data-testid="stMetric"] {
+        border: 1px solid rgba(49, 63, 54, 0.15);
+        border-radius: 14px;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.75);
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+    }
+
+    div[data-testid="stDataFrame"],
+    div[data-testid="stDataEditor"] {
+        border-radius: 14px;
+        overflow: hidden;
+    }
+
+    hr {
+        margin-top: 1.2rem;
+        margin-bottom: 1.2rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+# ------------------------------------------------------------
+# [Einde] Layout styling
+# ------------------------------------------------------------
+
 HERE = os.path.dirname(__file__)
 AUTH_YAML = os.path.join(HERE, "auth.yaml")
 
@@ -509,9 +592,14 @@ def _excel_export_bytes(df: pd.DataFrame, title: str) -> BytesIO:
 user = login_panel()
 ensure_state()
 
-st.markdown("## 🌿 GPC Orders Systeem")
+st.markdown("""
+<div class="gpc-topbar">
+    <h1>🌿 GPC Orders</h1>
+    <p>Order Management System · GitHub storage · Cloud app</p>
+</div>
+""", unsafe_allow_html=True)
 
-top_left, top_right = st.columns([5, 2])
+top_left, top_right = st.columns([5.5, 2])
 
 with top_left:
     page = st.radio(
@@ -524,7 +612,6 @@ with top_left:
 
 with top_right:
     st.caption(f"👤 Ingelogd als **{user['name']}**")
-
     btn_save, btn_logout = st.columns(2)
 
     with btn_save:
@@ -548,6 +635,19 @@ if page == "Dashboard":
 
     orders = st.session_state.orders
     products = st.session_state.products
+
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        st.metric("Orders", len(st.session_state.orders))
+    with k2:
+        st.metric("Klanten", len(st.session_state.customers))
+    with k3:
+        st.metric("Producten", len(st.session_state.products))
+    with k4:
+        total_qty = int(pd.to_numeric(st.session_state.orders.get("quantity", pd.Series(dtype="float")), errors="coerce").fillna(0).sum()) if not st.session_state.orders.empty else 0
+        st.metric("Totaal aantal", total_qty)
+
+    st.markdown("<div class='gpc-card'></div>", unsafe_allow_html=True)
 
     if orders.empty:
         st.info("Nog geen data. Voeg eerst producten/klanten/orders toe.")
@@ -584,7 +684,20 @@ if page == "Dashboard":
 elif page == "Orders":
     st.title("📦 Orders")
 
-    st.subheader("➕ Nieuwe order")
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        st.metric("Orders", len(st.session_state.orders))
+    with k2:
+        open_years = sorted(st.session_state.orders["year"].dropna().astype(int).unique().tolist()) if not st.session_state.orders.empty else []
+        st.metric("Jaren", len(open_years))
+    with k3:
+        total_qty = int(pd.to_numeric(st.session_state.orders.get("quantity", pd.Series(dtype="float")), errors="coerce").fillna(0).sum()) if not st.session_state.orders.empty else 0
+        st.metric("Totaal aantal", total_qty)
+    with k4:
+        st.metric("Producten", len(st.session_state.products))
+
+    st.markdown("<div class='gpc-section-title'>➕ Nieuwe order</div>", unsafe_allow_html=True)
+    st.markdown("<div class='gpc-muted'>Snel invoeren blijft direct zichtbaar.</div>", unsafe_allow_html=True)
 
     if st.session_state.customers.empty or st.session_state.products.empty:
         st.warning("Je hebt klanten én producten nodig om een order toe te voegen.")
@@ -988,7 +1101,14 @@ elif page == "Orders":
 elif page == "Klanten":
     st.title("👥 Klanten")
 
-    st.subheader("➕ Nieuwe klant")
+    k1, k2 = st.columns(2)
+    with k1:
+        st.metric("Klanten", len(st.session_state.customers))
+    with k2:
+        emails = st.session_state.customers["email"].replace("", pd.NA).dropna().shape[0] if not st.session_state.customers.empty and "email" in st.session_state.customers.columns else 0
+        st.metric("Met e-mail", emails)
+
+    st.markdown("<div class='gpc-section-title'>➕ Nieuwe klant</div>", unsafe_allow_html=True)
 
     with st.form("add_customer_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
@@ -1090,7 +1210,17 @@ elif page == "Klanten":
 elif page == "Producten":
     st.title("🪴 Producten")
 
-    st.subheader("➕ Nieuw product")
+    k1, k2, k3 = st.columns(3)
+    with k1:
+        st.metric("Producten", len(st.session_state.products))
+    with k2:
+        suppliers = st.session_state.products["supplier"].dropna().astype(str).replace("", pd.NA).dropna().nunique() if not st.session_state.products.empty and "supplier" in st.session_state.products.columns else 0
+        st.metric("Leveranciers", suppliers)
+    with k3:
+        available = int(pd.to_numeric(st.session_state.products.get("four_week_availability", pd.Series(dtype="float")), errors="coerce").fillna(0).sum()) if not st.session_state.products.empty else 0
+        st.metric("Beschikbaar 4w", available)
+
+    st.markdown("<div class='gpc-section-title'>➕ Nieuw product</div>", unsafe_allow_html=True)
 
     with st.form("add_product_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
