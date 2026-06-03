@@ -929,26 +929,52 @@ elif page == "Orders":
             key="orders_data_editor_v1",
         )
 
-        c1, c2, _ = st.columns([1, 1, 6])
+        selected_order_ids = edited_orders.loc[
+            edited_orders["Selecteer"] == True,
+            "Order ID"
+        ].dropna().astype(int).tolist()
+
+        filtered_order_ids = filtered_df["_OID"].dropna().astype(int).tolist()
+
+        st.caption(
+            f"Zichtbaar na filters: {len(filtered_order_ids)} order(s) · "
+            f"Handmatig geselecteerd: {len(selected_order_ids)} order(s)"
+        )
+
+        confirm_delete_filtered = st.checkbox(
+            "Ik wil alle zichtbaar gefilterde orders kunnen verwijderen",
+            key="confirm_delete_filtered_orders"
+        )
+
+        c1, c2, c3, _ = st.columns([1.4, 1.6, 1.2, 4])
 
         with c1:
-            if st.button("🗑️ Verwijder geselecteerde orders", use_container_width=True):
-                del_ids = edited_orders.loc[
-                    edited_orders["Selecteer"] == True,
-                    "Order ID"
-                ].dropna().astype(int).tolist()
-
-                if not del_ids:
+            if st.button("🗑️ Verwijder geselecteerde", use_container_width=True):
+                if not selected_order_ids:
                     st.warning("Selecteer eerst één of meer orders.")
                 else:
                     st.session_state.orders = st.session_state.orders[
-                        ~st.session_state.orders["id"].isin(del_ids)
+                        ~st.session_state.orders["id"].isin(selected_order_ids)
                     ]
                     save_data()
-                    st.success(f"Verwijderd: {del_ids}")
+                    st.success(f"Verwijderd: {len(selected_order_ids)} order(s).")
                     st.rerun()
 
         with c2:
+            if st.button("🧹 Verwijder alle gefilterde", use_container_width=True):
+                if not filtered_order_ids:
+                    st.warning("Er zijn geen gefilterde orders om te verwijderen.")
+                elif not confirm_delete_filtered:
+                    st.warning("Vink eerst de bevestiging aan. Dit voorkomt per ongeluk alles verwijderen.")
+                else:
+                    st.session_state.orders = st.session_state.orders[
+                        ~st.session_state.orders["id"].isin(filtered_order_ids)
+                    ]
+                    save_data()
+                    st.success(f"Alle zichtbaar gefilterde orders verwijderd: {len(filtered_order_ids)} order(s).")
+                    st.rerun()
+
+        with c3:
             if st.button("💾 Wijzigingen opslaan", use_container_width=True):
                 try:
                     orders_base = st.session_state.orders.copy().set_index("id")
