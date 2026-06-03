@@ -696,16 +696,18 @@ elif page == "Orders":
     with k4:
         st.metric("Producten", len(st.session_state.products))
 
-    st.markdown("<div class='gpc-section-title'>➕ Nieuwe order</div>", unsafe_allow_html=True)
-    st.markdown("<div class='gpc-muted'>Snel invoeren blijft direct zichtbaar.</div>", unsafe_allow_html=True)
+    base_df = build_orders_display_df()
 
-    if st.session_state.customers.empty or st.session_state.products.empty:
-        st.warning("Je hebt klanten én producten nodig om een order toe te voegen.")
-    else:
-        with st.form("add_order_form", clear_on_submit=True):
-            cA, cB = st.columns(2)
+    top_order_col, top_filter_col = st.columns([1, 1], gap="large")
 
-            with cA:
+    with top_order_col:
+        st.markdown("<div class='gpc-section-title'>➕ Nieuwe order</div>", unsafe_allow_html=True)
+        st.markdown("<div class='gpc-muted'>Snel invoeren blijft direct zichtbaar.</div>", unsafe_allow_html=True)
+
+        if st.session_state.customers.empty or st.session_state.products.empty:
+            st.warning("Je hebt klanten én producten nodig om een order toe te voegen.")
+        else:
+            with st.form("add_order_form", clear_on_submit=True):
                 cust_ids = st.session_state.customers["id"].dropna().astype(int).tolist()
                 prod_ids = st.session_state.products["id"].dropna().astype(int).tolist()
 
@@ -727,9 +729,12 @@ elif page == "Orders":
                     index=0
                 )
 
-                amount = st.number_input("Aantal *", min_value=1, step=1, value=1)
+                o1, o2 = st.columns(2)
+                with o1:
+                    amount = st.number_input("Aantal *", min_value=1, step=1, value=1)
+                with o2:
+                    jaar = st.number_input("Jaar *", min_value=2020, max_value=2100, step=1, value=datetime.now().year)
 
-            with cB:
                 verkoop, sp_ok = money_input(
                     "Verkoopprijs (optioneel)",
                     value=0.00,
@@ -737,90 +742,95 @@ elif page == "Orders":
                     help="Gebruik 12,34 of 12.34."
                 )
 
-                weeks_txt = st.text_input("Weeknummers * (komma gescheiden, bijv. 4,8,12)", value="")
-                jaar = st.number_input("Jaar *", min_value=2020, max_value=2100, step=1, value=datetime.now().year)
+                weeks_txt = st.text_input("Weeknummers *", value="", placeholder="Bijv. 4,8,12")
 
-            enable_enter_navigation("Order(s) toevoegen")
-            submitted = st.form_submit_button("Order(s) toevoegen")
+                enable_enter_navigation("Order(s) toevoegen")
+                submitted = st.form_submit_button("Order(s) toevoegen")
 
-            if submitted:
-                errors = []
+                if submitted:
+                    errors = []
 
-                if sel_customer is None:
-                    errors.append("Kies een klant.")
+                    if sel_customer is None:
+                        errors.append("Kies een klant.")
 
-                if sel_product is None:
-                    errors.append("Kies een product.")
+                    if sel_product is None:
+                        errors.append("Kies een product.")
 
-                if not sp_ok:
-                    errors.append("Verkoopprijs is ongeldig. Gebruik 12,34 of 12.34.")
+                    if not sp_ok:
+                        errors.append("Verkoopprijs is ongeldig. Gebruik 12,34 of 12.34.")
 
-                weken, bad = [], []
+                    weken, bad = [], []
 
-                if not weeks_txt.strip():
-                    errors.append("Vul ten minste één weeknummer in.")
-                else:
-                    for p in [w.strip() for w in weeks_txt.split(",") if w.strip()]:
-                        try:
-                            w = int(p)
-                            if 1 <= w <= 53:
-                                weken.append(w)
-                            else:
+                    if not weeks_txt.strip():
+                        errors.append("Vul ten minste één weeknummer in.")
+                    else:
+                        for p in [w.strip() for w in weeks_txt.split(",") if w.strip()]:
+                            try:
+                                w = int(p)
+                                if 1 <= w <= 53:
+                                    weken.append(w)
+                                else:
+                                    bad.append(p)
+                            except Exception:
                                 bad.append(p)
-                        except Exception:
-                            bad.append(p)
 
-                weken = sorted(list(dict.fromkeys(weken)))
+                    weken = sorted(list(dict.fromkeys(weken)))
 
-                if bad:
-                    errors.append(f"Ongeldige weeknummers: {', '.join(bad)} (toegestaan: 1..53)")
+                    if bad:
+                        errors.append(f"Ongeldige weeknummers: {', '.join(bad)} (toegestaan: 1..53)")
 
-                if errors:
-                    for e in errors:
-                        st.error(e)
-                else:
-                    base_id = next_id(st.session_state.orders)
-                    rows = []
+                    if errors:
+                        for e in errors:
+                            st.error(e)
+                    else:
+                        base_id = next_id(st.session_state.orders)
+                        rows = []
 
-                    for idx, w in enumerate(weken):
-                        rows.append({
-                            "id": base_id + idx,
-                            "customer_id": int(sel_customer),
-                            "product_id": int(sel_product),
-                            "quantity": int(amount),
-                            "sales_price": float(verkoop) if verkoop is not None else None,
-                            "week_number": int(w),
-                            "year": int(jaar),
-                        })
+                        for idx, w in enumerate(weken):
+                            rows.append({
+                                "id": base_id + idx,
+                                "customer_id": int(sel_customer),
+                                "product_id": int(sel_product),
+                                "quantity": int(amount),
+                                "sales_price": float(verkoop) if verkoop is not None else None,
+                                "week_number": int(w),
+                                "year": int(jaar),
+                            })
 
-                    st.session_state.orders = pd.concat(
-                        [st.session_state.orders, pd.DataFrame(rows)],
-                        ignore_index=True
-                    )
+                        st.session_state.orders = pd.concat(
+                            [st.session_state.orders, pd.DataFrame(rows)],
+                            ignore_index=True
+                        )
 
-                    st.session_state["last_customer_id"] = int(sel_customer)
-                    save_data()
-                    st.success(f"Toegevoegd: {len(rows)} order(s) voor weken: {', '.join(map(str, weken))}")
-                    st.rerun()
+                        st.session_state["last_customer_id"] = int(sel_customer)
+                        save_data()
+                        st.success(f"Toegevoegd: {len(rows)} order(s) voor weken: {', '.join(map(str, weken))}")
+                        st.rerun()
 
-    st.markdown("---")
+    with top_filter_col:
+        st.markdown("<div class='gpc-section-title'>🔎 Filters</div>", unsafe_allow_html=True)
+        st.markdown("<div class='gpc-muted'>Filtert de tabel én de exports.</div>", unsafe_allow_html=True)
 
-    base_df = build_orders_display_df()
-
-    with st.expander("🔎 Filters (tabel & export)"):
         q = st.text_input(
             "Zoeken",
             value="",
             placeholder="Zoek in Customer, Supplier, Article of Description…"
         )
 
-        f1, f2, f3, f4 = st.columns(4)
-
+        f1, f2 = st.columns(2)
         with f1:
             flt_customer = st.multiselect(
                 "Customer",
                 options=sorted(base_df["Customer"].dropna().astype(str).unique().tolist())
             )
+
+            flt_article = st.multiselect(
+                "Article",
+                options=sorted(base_df["Article"].dropna().astype(str).unique().tolist())
+            )
+
+            unique_weeks = sorted(base_df["Week"].dropna().astype(int).unique().tolist())
+            flt_weeks = st.multiselect("Week", options=unique_weeks)
 
         with f2:
             flt_supplier = st.multiselect(
@@ -828,18 +838,10 @@ elif page == "Orders":
                 options=sorted(base_df["Supplier"].dropna().astype(str).unique().tolist())
             )
 
-        with f3:
-            flt_article = st.multiselect(
-                "Article",
-                options=sorted(base_df["Article"].dropna().astype(str).unique().tolist())
-            )
-
-        with f4:
             unique_years = sorted(base_df["Year"].dropna().astype(int).unique().tolist())
             flt_years = st.multiselect("Year", options=unique_years)
 
-            unique_weeks = sorted(base_df["Week"].dropna().astype(int).unique().tolist())
-            flt_weeks = st.multiselect("Week", options=unique_weeks)
+    st.markdown("---")
 
     filtered_df = base_df.copy()
 
