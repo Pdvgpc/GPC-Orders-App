@@ -29,7 +29,7 @@ st.set_page_config(page_title="GPC Orders Systeem", layout="wide")
 st.markdown("""
 <style>
     .block-container {
-        padding-top: 1.2rem;
+        padding-top: 4rem;
         padding-bottom: 2rem;
         max-width: 96%;
     }
