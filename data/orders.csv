@@ -1,5 +1,4 @@
 id,customer_id,product_id,quantity,week_number,year,notes,sales_price
-122,2,4,500,22,2026,,2.5
 123,2,4,500,26,2026,,2.5
 124,2,4,500,30,2026,,2.5
 125,2,4,500,34,2026,,2.5
