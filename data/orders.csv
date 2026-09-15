@@ -259,3 +259,4 @@ id,customer_id,product_id,quantity,week_number,year,notes,sales_price
 943,1,55,600,38,2026,,0.21
 944,1,55,600,42,2026,,0.21
 945,8,73,500,42,2026,,0.43
+946,8,134,100,42,2026,,0.43
