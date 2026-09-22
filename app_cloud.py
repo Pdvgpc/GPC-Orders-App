@@ -31,122 +31,144 @@ st.markdown("""
 :root {
     --gpc-green: #17633f;
     --gpc-green-dark: #10492f;
-    --gpc-green-soft: #eaf4ef;
-    --gpc-border: #d7dfdb;
+    --gpc-green-soft: #e9f3ee;
+    --gpc-border: #d9e1dd;
     --gpc-text: #1f2937;
     --gpc-muted: #667085;
-    --gpc-bg: #f5f7f6;
+    --gpc-bg: #f4f6f5;
     --gpc-white: #ffffff;
 }
 
-/* Prevent the app from sitting under Streamlit's own top chrome */
-[data-testid="stHeader"] {
-    background: rgba(255,255,255,0.96);
-}
-.block-container {
-    padding-top: 4.5rem !important;
-    padding-bottom: 2rem !important;
-    max-width: 96% !important;
-}
-
-/* Overall page */
 .stApp {
     background: var(--gpc-bg);
     color: var(--gpc-text);
 }
 
-/* Compact ERP-style title bar */
+[data-testid="stHeader"] {
+    background: rgba(255,255,255,0.98);
+    border-bottom: 1px solid #eef1ef;
+}
+
+.block-container {
+    padding-top: 4.8rem !important;
+    padding-bottom: 2.5rem !important;
+    max-width: 1500px !important;
+}
+
+/* App shell */
 .gpc-shell {
     background: var(--gpc-white);
     border: 1px solid var(--gpc-border);
-    border-radius: 8px;
-    padding: 14px 18px 12px 18px;
-    margin-bottom: 10px;
+    border-left: 5px solid var(--gpc-green);
+    border-radius: 10px;
+    padding: 18px 20px 16px 20px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
 }
 .gpc-shell-title {
-    font-size: 1.35rem;
-    font-weight: 750;
-    letter-spacing: -0.02em;
+    font-size: 1.6rem;
+    font-weight: 760;
+    letter-spacing: -0.025em;
     color: var(--gpc-text);
     margin: 0;
-    line-height: 1.15;
+    line-height: 1.1;
 }
 .gpc-shell-subtitle {
-    font-size: 0.82rem;
+    font-size: 0.86rem;
     color: var(--gpc-muted);
-    margin: 4px 0 0 0;
+    margin: 5px 0 0 0;
 }
 
-/* Main page headings */
+/* Headings */
 h1 {
-    font-size: 1.95rem !important;
-    letter-spacing: -0.03em !important;
-    margin-bottom: 0.55rem !important;
+    font-size: 2.2rem !important;
+    letter-spacing: -0.035em !important;
+    margin-top: 0.5rem !important;
+    margin-bottom: 0.85rem !important;
 }
 h2, h3 {
     letter-spacing: -0.02em !important;
 }
 
-/* Navigation: make Streamlit radio look like application tabs */
+/* Top navigation */
 div[role="radiogroup"] {
     display: flex !important;
-    gap: 0.15rem !important;
+    gap: 0.25rem !important;
     align-items: center !important;
     background: var(--gpc-white) !important;
     border: 1px solid var(--gpc-border) !important;
-    border-radius: 7px !important;
-    padding: 4px !important;
+    border-radius: 8px !important;
+    padding: 5px !important;
     width: fit-content !important;
+    box-shadow: 0 1px 3px rgba(16,24,40,0.04);
 }
 div[role="radiogroup"] label {
     margin: 0 !important;
-    padding: 7px 13px !important;
-    border-radius: 5px !important;
+    padding: 8px 16px !important;
+    border-radius: 6px !important;
     cursor: pointer !important;
     transition: 0.15s ease !important;
-}
-div[role="radiogroup"] label:hover {
-    background: #f3f6f4 !important;
-}
-div[role="radiogroup"] label:has(input:checked) {
-    background: var(--gpc-green-soft) !important;
-    color: var(--gpc-green-dark) !important;
-    font-weight: 700 !important;
 }
 div[role="radiogroup"] label > div:first-child {
     display: none !important;
 }
 div[role="radiogroup"] label p {
     margin: 0 !important;
+    font-size: 0.92rem !important;
 }
-
-/* Section labels */
-.gpc-section-title {
-    font-size: 1.02rem;
-    font-weight: 700;
-    color: var(--gpc-text);
-    margin: 0 0 0.3rem 0;
+div[role="radiogroup"] label:hover {
+    background: #f2f5f3 !important;
 }
-.gpc-muted {
-    color: var(--gpc-muted);
-    font-size: 0.82rem;
-    margin-top: -0.1rem;
-    margin-bottom: 0.65rem;
+div[role="radiogroup"] label:has(input:checked) {
+    background: var(--gpc-green) !important;
+    color: white !important;
+    font-weight: 700 !important;
 }
 
 /* KPI cards */
 div[data-testid="stMetric"] {
     border: 1px solid var(--gpc-border);
-    border-radius: 7px;
-    padding: 11px 13px;
+    border-radius: 9px;
+    padding: 14px 16px;
     background: var(--gpc-white);
-    box-shadow: 0 1px 2px rgba(16,24,40,0.03);
+    box-shadow: 0 2px 6px rgba(16,24,40,0.035);
 }
 div[data-testid="stMetricLabel"] {
     color: var(--gpc-muted);
+    font-size: 0.82rem;
 }
 div[data-testid="stMetricValue"] {
     color: var(--gpc-text);
+    font-weight: 700;
+}
+
+/* Orders page cards */
+div[data-testid="stColumn"]:has(.gpc-order-card-marker),
+div[data-testid="stColumn"]:has(.gpc-filter-card-marker) {
+    background: var(--gpc-white);
+    border: 1px solid var(--gpc-border);
+    border-radius: 10px;
+    padding: 18px 18px 14px 18px;
+    box-shadow: 0 2px 8px rgba(16,24,40,0.035);
+}
+
+.gpc-section-title {
+    font-size: 1.08rem;
+    font-weight: 730;
+    color: var(--gpc-text);
+    margin: 0 0 0.3rem 0;
+}
+.gpc-muted {
+    color: var(--gpc-muted);
+    font-size: 0.84rem;
+    margin-top: -0.1rem;
+    margin-bottom: 0.75rem;
+}
+.gpc-order-card-marker,
+.gpc-filter-card-marker {
+    height: 0;
+    margin: 0;
+    padding: 0;
 }
 
 /* Inputs */
@@ -154,21 +176,25 @@ div[data-baseweb="select"] > div,
 input,
 textarea,
 div[data-testid="stNumberInput"] input {
-    border-radius: 5px !important;
+    border-radius: 6px !important;
 }
 div[data-testid="stTextInput"] input,
 div[data-testid="stNumberInput"] input,
 div[data-testid="stSelectbox"] > div > div,
 div[data-testid="stMultiSelect"] > div > div {
-    min-height: 2.45rem !important;
+    min-height: 2.7rem !important;
+    background: #fbfcfb !important;
+}
+label p {
+    font-size: 0.86rem !important;
 }
 
 /* Buttons */
 .stButton > button,
 .stDownloadButton > button {
-    border-radius: 5px !important;
-    min-height: 2.35rem !important;
-    font-weight: 600 !important;
+    border-radius: 6px !important;
+    min-height: 2.55rem !important;
+    font-weight: 650 !important;
     box-shadow: none !important;
 }
 .stButton > button[kind="primary"] {
@@ -176,35 +202,36 @@ div[data-testid="stMultiSelect"] > div > div {
     border-color: var(--gpc-green) !important;
 }
 
-/* Tables */
+/* Forms */
+div[data-testid="stForm"] {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+/* Table */
 div[data-testid="stDataFrame"],
 div[data-testid="stDataEditor"] {
     border: 1px solid var(--gpc-border);
-    border-radius: 7px;
+    border-radius: 9px;
     overflow: hidden;
     background: var(--gpc-white);
+    box-shadow: 0 2px 8px rgba(16,24,40,0.03);
 }
 
-/* Forms / expander */
-div[data-testid="stForm"] {
-    background: var(--gpc-white);
-    border: 1px solid var(--gpc-border);
-    border-radius: 7px;
-    padding: 14px 14px 10px 14px;
-}
-details {
-    border-radius: 7px !important;
-}
-
-/* Remove excessive separators */
+/* Separators */
 hr {
-    margin: 0.8rem 0 1rem 0 !important;
+    margin: 1rem 0 1.15rem 0 !important;
     border-color: var(--gpc-border) !important;
 }
 
-/* Compact captions */
 [data-testid="stCaptionContainer"] {
     color: var(--gpc-muted);
+}
+
+/* Make the screen less visually tiny on wide monitors */
+html, body, [class*="css"] {
+    font-size: 15px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -698,7 +725,7 @@ def _excel_export_bytes(df: pd.DataFrame, title: str) -> BytesIO:
 user = login_panel()
 ensure_state()
 
-header_left, header_right = st.columns([5.6, 2.4])
+header_left, header_right = st.columns([6.2, 2.0])
 
 with header_left:
     st.markdown("""
@@ -710,25 +737,29 @@ with header_left:
 
 with header_right:
     st.write("")
-    user_col, save_col, logout_col = st.columns([1.5, 1, 1])
+    user_col, action_col = st.columns([1.2, 1])
     with user_col:
         st.caption(f"👤 **{user['name']}**")
-    with save_col:
-        if st.button("Opslaan", use_container_width=True, key="top_save"):
-            save_data()
-            st.success("Opgeslagen.")
-    with logout_col:
+    with action_col:
         if st.button("Uitloggen", use_container_width=True, key="top_logout"):
             st.session_state["auth_user"] = None
             st.rerun()
 
-page = st.radio(
-    "Navigatie",
-    ["Dashboard", "Orders", "Klanten", "Producten"],
-    horizontal=True,
-    label_visibility="collapsed",
-    key="top_navigation"
-)
+nav_col, save_col = st.columns([6.5, 1.0])
+
+with nav_col:
+    page = st.radio(
+        "Navigatie",
+        ["Dashboard", "Orders", "Klanten", "Producten"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="top_navigation"
+    )
+
+with save_col:
+    if st.button("Opslaan", type="primary", use_container_width=True, key="top_save"):
+        save_data()
+        st.success("Opgeslagen.")
 
 st.markdown("---")
 
@@ -807,6 +838,7 @@ elif page == "Orders":
     top_order_col, top_filter_col = st.columns([1, 1], gap="medium")
 
     with top_order_col:
+        st.markdown("<div class='gpc-order-card-marker'></div>", unsafe_allow_html=True)
         st.markdown("<div class='gpc-section-title'>Nieuwe order</div>", unsafe_allow_html=True)
         st.markdown("<div class='gpc-muted'>Snel invoeren blijft direct zichtbaar.</div>", unsafe_allow_html=True)
 
@@ -914,6 +946,7 @@ elif page == "Orders":
                         st.rerun()
 
     with top_filter_col:
+        st.markdown("<div class='gpc-filter-card-marker'></div>", unsafe_allow_html=True)
         st.markdown("<div class='gpc-section-title'>Filters</div>", unsafe_allow_html=True)
         st.markdown("<div class='gpc-muted'>Filtert de tabel én de exports.</div>", unsafe_allow_html=True)
 
@@ -976,7 +1009,7 @@ elif page == "Orders":
     if filtered_df.empty:
         st.info("Geen orders gevonden.")
     else:
-        st.subheader("📋 Orders")
+        st.markdown("### Orders")
 
         editor_df = filtered_df.copy()
         editor_df.insert(0, "Selecteer", False)
@@ -1018,18 +1051,19 @@ elif page == "Orders":
             use_container_width=True,
             hide_index=True,
             num_rows="fixed",
+            height=520,
             column_config={
                 "Selecteer": st.column_config.CheckboxColumn(),
-                "Customer": st.column_config.TextColumn(disabled=True),
-                "Article": st.column_config.TextColumn(disabled=True),
-                "Description": st.column_config.TextColumn(disabled=True),
-                "Quantity": st.column_config.NumberColumn(min_value=0, step=1),
-                "Purchase Price": st.column_config.NumberColumn(format="%.4f"),
-                "Sales Price": st.column_config.NumberColumn(format="%.2f"),
-                "Supplier": st.column_config.TextColumn(disabled=True),
-                "Week": st.column_config.NumberColumn(min_value=1, max_value=53, step=1),
+                "Customer": st.column_config.TextColumn(disabled=True, width="medium"),
+                "Article": st.column_config.TextColumn(disabled=True, width="large"),
+                "Description": st.column_config.TextColumn(disabled=True, width="medium"),
+                "Quantity": st.column_config.NumberColumn(min_value=0, step=1, width="small"),
+                "Purchase Price": st.column_config.NumberColumn(format="%.4f", width="small"),
+                "Sales Price": st.column_config.NumberColumn(format="%.2f", width="small"),
+                "Supplier": st.column_config.TextColumn(disabled=True, width="small"),
+                "Week": st.column_config.NumberColumn(min_value=1, max_value=53, step=1, width="small"),
                 "Week Start (Mon)": st.column_config.DateColumn(disabled=True),
-                "Year": st.column_config.NumberColumn(min_value=2020, max_value=2100, step=1),
+                "Year": st.column_config.NumberColumn(min_value=2020, max_value=2100, step=1, width="small"),
                 "Order ID": None,
                 "Customer ID": None,
                 "Product ID": None,
