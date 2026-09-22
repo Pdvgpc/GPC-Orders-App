@@ -30,9 +30,10 @@ st.markdown("""
 <style>
 :root {
     --gpc-green: #17633f;
-    --gpc-green-dark: #10492f;
-    --gpc-green-soft: #e9f3ee;
+    --gpc-green-dark: #0f4d31;
+    --gpc-green-soft: #eef6f1;
     --gpc-border: #d9e1dd;
+    --gpc-border-strong: #cbd5cf;
     --gpc-text: #1f2937;
     --gpc-muted: #667085;
     --gpc-bg: #f4f6f5;
@@ -46,68 +47,49 @@ st.markdown("""
 
 [data-testid="stHeader"] {
     background: rgba(255,255,255,0.98);
-    border-bottom: 1px solid #eef1ef;
+    border-bottom: 1px solid #edf0ee;
 }
 
 .block-container {
-    padding-top: 4.8rem !important;
+    padding-top: 4.9rem !important;
     padding-bottom: 2.5rem !important;
     max-width: 1500px !important;
 }
 
-/* App shell */
-.gpc-shell {
+/* top app bar */
+.gpc-top-shell {
     background: var(--gpc-white);
     border: 1px solid var(--gpc-border);
-    border-left: 5px solid var(--gpc-green);
-    border-radius: 10px;
-    padding: 18px 20px 16px 20px;
-    margin-bottom: 12px;
-    box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 4px rgba(16,24,40,0.04);
 }
-.gpc-shell-title {
-    font-size: 1.6rem;
+.gpc-brand {
+    font-size: 1.5rem;
     font-weight: 760;
     letter-spacing: -0.025em;
-    color: var(--gpc-text);
     margin: 0;
-    line-height: 1.1;
 }
-.gpc-shell-subtitle {
-    font-size: 0.86rem;
+.gpc-brand-sub {
+    font-size: 0.82rem;
     color: var(--gpc-muted);
-    margin: 5px 0 0 0;
+    margin-top: 3px;
 }
 
-/* Headings */
-h1 {
-    font-size: 2.2rem !important;
-    letter-spacing: -0.035em !important;
-    margin-top: 0.5rem !important;
-    margin-bottom: 0.85rem !important;
-}
-h2, h3 {
-    letter-spacing: -0.02em !important;
-}
-
-/* Top navigation */
+/* navigation */
 div[role="radiogroup"] {
     display: flex !important;
-    gap: 0.25rem !important;
+    gap: 0.2rem !important;
     align-items: center !important;
-    background: var(--gpc-white) !important;
-    border: 1px solid var(--gpc-border) !important;
-    border-radius: 8px !important;
-    padding: 5px !important;
+    background: transparent !important;
     width: fit-content !important;
-    box-shadow: 0 1px 3px rgba(16,24,40,0.04);
 }
 div[role="radiogroup"] label {
     margin: 0 !important;
-    padding: 8px 16px !important;
-    border-radius: 6px !important;
+    padding: 7px 14px !important;
+    border-radius: 5px !important;
     cursor: pointer !important;
-    transition: 0.15s ease !important;
 }
 div[role="radiogroup"] label > div:first-child {
     display: none !important;
@@ -117,7 +99,7 @@ div[role="radiogroup"] label p {
     font-size: 0.92rem !important;
 }
 div[role="radiogroup"] label:hover {
-    background: #f2f5f3 !important;
+    background: #f0f3f1 !important;
 }
 div[role="radiogroup"] label:has(input:checked) {
     background: var(--gpc-green) !important;
@@ -125,75 +107,67 @@ div[role="radiogroup"] label:has(input:checked) {
     font-weight: 700 !important;
 }
 
+/* page headings */
+h1 {
+    font-size: 2rem !important;
+    letter-spacing: -0.035em !important;
+    margin: 0.55rem 0 0.8rem 0 !important;
+}
+h2, h3 {
+    letter-spacing: -0.02em !important;
+}
+
 /* KPI cards */
 div[data-testid="stMetric"] {
     border: 1px solid var(--gpc-border);
-    border-radius: 9px;
-    padding: 14px 16px;
+    border-radius: 7px;
+    padding: 11px 13px;
     background: var(--gpc-white);
-    box-shadow: 0 2px 6px rgba(16,24,40,0.035);
-}
-div[data-testid="stMetricLabel"] {
-    color: var(--gpc-muted);
-    font-size: 0.82rem;
-}
-div[data-testid="stMetricValue"] {
-    color: var(--gpc-text);
-    font-weight: 700;
+    box-shadow: none;
 }
 
-/* Orders page cards */
-div[data-testid="stColumn"]:has(.gpc-order-card-marker),
-div[data-testid="stColumn"]:has(.gpc-filter-card-marker) {
+/* Orders toolbar block */
+.gpc-orders-toolbar {
     background: var(--gpc-white);
     border: 1px solid var(--gpc-border);
-    border-radius: 10px;
-    padding: 18px 18px 14px 18px;
-    box-shadow: 0 2px 8px rgba(16,24,40,0.035);
+    border-radius: 8px;
+    padding: 14px 16px 10px 16px;
+    margin-bottom: 12px;
 }
-
-.gpc-section-title {
-    font-size: 1.08rem;
-    font-weight: 730;
-    color: var(--gpc-text);
-    margin: 0 0 0.3rem 0;
+.gpc-toolbar-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 4px;
 }
-.gpc-muted {
+.gpc-toolbar-sub {
     color: var(--gpc-muted);
-    font-size: 0.84rem;
-    margin-top: -0.1rem;
-    margin-bottom: 0.75rem;
-}
-.gpc-order-card-marker,
-.gpc-filter-card-marker {
-    height: 0;
-    margin: 0;
-    padding: 0;
+    font-size: 0.82rem;
+    margin-bottom: 8px;
 }
 
-/* Inputs */
+/* General compact controls */
 div[data-baseweb="select"] > div,
 input,
 textarea,
 div[data-testid="stNumberInput"] input {
-    border-radius: 6px !important;
+    border-radius: 5px !important;
 }
 div[data-testid="stTextInput"] input,
 div[data-testid="stNumberInput"] input,
 div[data-testid="stSelectbox"] > div > div,
 div[data-testid="stMultiSelect"] > div > div {
-    min-height: 2.7rem !important;
-    background: #fbfcfb !important;
+    min-height: 2.5rem !important;
+    background: #fff !important;
 }
 label p {
-    font-size: 0.86rem !important;
+    font-size: 0.84rem !important;
 }
 
-/* Buttons */
+/* buttons */
 .stButton > button,
 .stDownloadButton > button {
-    border-radius: 6px !important;
-    min-height: 2.55rem !important;
+    border-radius: 5px !important;
+    min-height: 2.45rem !important;
     font-weight: 650 !important;
     box-shadow: none !important;
 }
@@ -202,36 +176,40 @@ label p {
     border-color: var(--gpc-green) !important;
 }
 
-/* Forms */
+/* forms */
 div[data-testid="stForm"] {
     background: transparent;
     border: none;
     padding: 0;
 }
 
-/* Table */
+/* editor */
 div[data-testid="stDataFrame"],
 div[data-testid="stDataEditor"] {
-    border: 1px solid var(--gpc-border);
-    border-radius: 9px;
+    border: 1px solid var(--gpc-border-strong);
+    border-radius: 7px;
     overflow: hidden;
     background: var(--gpc-white);
-    box-shadow: 0 2px 8px rgba(16,24,40,0.03);
+    box-shadow: none;
 }
 
-/* Separators */
-hr {
-    margin: 1rem 0 1.15rem 0 !important;
-    border-color: var(--gpc-border) !important;
+/* headings used within pages */
+.gpc-section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--gpc-text);
+    margin: 0 0 0.3rem 0;
 }
-
-[data-testid="stCaptionContainer"] {
+.gpc-muted {
     color: var(--gpc-muted);
+    font-size: 0.82rem;
+    margin-top: -0.1rem;
+    margin-bottom: 0.6rem;
 }
 
-/* Make the screen less visually tiny on wide monitors */
-html, body, [class*="css"] {
-    font-size: 15px;
+hr {
+    margin: 0.85rem 0 1rem 0 !important;
+    border-color: var(--gpc-border) !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -725,29 +703,16 @@ def _excel_export_bytes(df: pd.DataFrame, title: str) -> BytesIO:
 user = login_panel()
 ensure_state()
 
-header_left, header_right = st.columns([6.2, 2.0])
+st.markdown("""
+<div class="gpc-top-shell">
+    <div class="gpc-brand">GPC Orders</div>
+    <div class="gpc-brand-sub">Order Management System</div>
+</div>
+""", unsafe_allow_html=True)
 
-with header_left:
-    st.markdown("""
-    <div class="gpc-shell">
-        <div class="gpc-shell-title">GPC Orders</div>
-        <div class="gpc-shell-subtitle">Order Management System</div>
-    </div>
-    """, unsafe_allow_html=True)
+nav_left, nav_right = st.columns([6.2, 2.0])
 
-with header_right:
-    st.write("")
-    user_col, action_col = st.columns([1.2, 1])
-    with user_col:
-        st.caption(f"👤 **{user['name']}**")
-    with action_col:
-        if st.button("Uitloggen", use_container_width=True, key="top_logout"):
-            st.session_state["auth_user"] = None
-            st.rerun()
-
-nav_col, save_col = st.columns([6.5, 1.0])
-
-with nav_col:
+with nav_left:
     page = st.radio(
         "Navigatie",
         ["Dashboard", "Orders", "Klanten", "Producten"],
@@ -756,10 +721,18 @@ with nav_col:
         key="top_navigation"
     )
 
-with save_col:
-    if st.button("Opslaan", type="primary", use_container_width=True, key="top_save"):
-        save_data()
-        st.success("Opgeslagen.")
+with nav_right:
+    user_col, save_col, logout_col = st.columns([1.4, 1, 1])
+    with user_col:
+        st.caption(f"👤 **{user['name']}**")
+    with save_col:
+        if st.button("Opslaan", type="primary", use_container_width=True, key="top_save"):
+            save_data()
+            st.success("Opgeslagen.")
+    with logout_col:
+        if st.button("Uitloggen", use_container_width=True, key="top_logout"):
+            st.session_state["auth_user"] = None
+            st.rerun()
 
 st.markdown("---")
 
@@ -821,164 +794,168 @@ if page == "Dashboard":
 elif page == "Orders":
     st.title("Orders")
 
-    k1, k2, k3, k4 = st.columns(4)
-    with k1:
-        st.metric("Orders", len(st.session_state.orders))
-    with k2:
-        open_years = sorted(st.session_state.orders["year"].dropna().astype(int).unique().tolist()) if not st.session_state.orders.empty else []
-        st.metric("Jaren", len(open_years))
-    with k3:
-        total_qty = int(pd.to_numeric(st.session_state.orders.get("quantity", pd.Series(dtype="float")), errors="coerce").fillna(0).sum()) if not st.session_state.orders.empty else 0
-        st.metric("Totaal aantal", total_qty)
-    with k4:
-        st.metric("Producten", len(st.session_state.products))
-
     base_df = build_orders_display_df()
 
-    top_order_col, top_filter_col = st.columns([1, 1], gap="medium")
+    st.markdown("""
+    <div class="gpc-orders-toolbar">
+        <div class="gpc-toolbar-title">Nieuwe order</div>
+        <div class="gpc-toolbar-sub">Snel invoeren</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    with top_order_col:
-        st.markdown("<div class='gpc-order-card-marker'></div>", unsafe_allow_html=True)
-        st.markdown("<div class='gpc-section-title'>Nieuwe order</div>", unsafe_allow_html=True)
-        st.markdown("<div class='gpc-muted'>Snel invoeren blijft direct zichtbaar.</div>", unsafe_allow_html=True)
+    if st.session_state.customers.empty or st.session_state.products.empty:
+        st.warning("Je hebt klanten én producten nodig om een order toe te voegen.")
+    else:
+        with st.form("add_order_form", clear_on_submit=True):
+            cust_ids = st.session_state.customers["id"].dropna().astype(int).tolist()
+            prod_ids = st.session_state.products["id"].dropna().astype(int).tolist()
 
-        if st.session_state.customers.empty or st.session_state.products.empty:
-            st.warning("Je hebt klanten én producten nodig om een order toe te voegen.")
-        else:
-            with st.form("add_order_form", clear_on_submit=True):
-                cust_ids = st.session_state.customers["id"].dropna().astype(int).tolist()
-                prod_ids = st.session_state.products["id"].dropna().astype(int).tolist()
+            last_cust = st.session_state.get("last_customer_id")
+            cust_options = [None] + cust_ids
+            cust_index = cust_options.index(last_cust) if last_cust in cust_ids else 0
 
-                last_cust = st.session_state.get("last_customer_id")
-                cust_options = [None] + cust_ids
-                cust_index = cust_options.index(last_cust) if last_cust in cust_ids else 0
-
+            r1, r2, r3, r4 = st.columns([1.5, 2.2, 0.8, 0.9])
+            with r1:
                 sel_customer = st.selectbox(
                     "Klant *",
                     options=cust_options,
                     format_func=lambda i: "" if i is None else fmt_select_from_df(i, st.session_state.customers),
                     index=cust_index
                 )
-
+            with r2:
                 sel_product = st.selectbox(
                     "Artikel (product) *",
                     options=[None] + prod_ids,
                     format_func=lambda i: "" if i is None else label_product_with_supplier(i),
                     index=0
                 )
+            with r3:
+                amount = st.number_input("Aantal *", min_value=1, step=1, value=1)
+            with r4:
+                jaar = st.number_input("Jaar *", min_value=2020, max_value=2100, step=1, value=datetime.now().year)
 
-                o1, o2 = st.columns(2)
-                with o1:
-                    amount = st.number_input("Aantal *", min_value=1, step=1, value=1)
-                with o2:
-                    jaar = st.number_input("Jaar *", min_value=2020, max_value=2100, step=1, value=datetime.now().year)
-
+            r5, r6, r7 = st.columns([1.1, 2.2, 1.0])
+            with r5:
                 verkoop, sp_ok = money_input(
-                    "Verkoopprijs (optioneel)",
+                    "Verkoopprijs",
                     value=0.00,
                     key="oi_sales_price",
                     help="Gebruik 12,34 of 12.34."
                 )
+            with r6:
+                weeks_txt = st.text_input(
+                    "Weeknummers *",
+                    value="",
+                    placeholder="Bijv. 4,8,12"
+                )
+            with r7:
+                st.write("")
+                st.write("")
+                submitted = st.form_submit_button(
+                    "Order(s) toevoegen",
+                    use_container_width=True
+                )
 
-                weeks_txt = st.text_input("Weeknummers *", value="", placeholder="Bijv. 4,8,12")
+            enable_enter_navigation("Order(s) toevoegen")
 
-                enable_enter_navigation("Order(s) toevoegen")
-                submitted = st.form_submit_button("Order(s) toevoegen")
+            if submitted:
+                errors = []
 
-                if submitted:
-                    errors = []
+                if sel_customer is None:
+                    errors.append("Kies een klant.")
+                if sel_product is None:
+                    errors.append("Kies een product.")
+                if not sp_ok:
+                    errors.append("Verkoopprijs is ongeldig. Gebruik 12,34 of 12.34.")
 
-                    if sel_customer is None:
-                        errors.append("Kies een klant.")
+                weken, bad = [], []
 
-                    if sel_product is None:
-                        errors.append("Kies een product.")
-
-                    if not sp_ok:
-                        errors.append("Verkoopprijs is ongeldig. Gebruik 12,34 of 12.34.")
-
-                    weken, bad = [], []
-
-                    if not weeks_txt.strip():
-                        errors.append("Vul ten minste één weeknummer in.")
-                    else:
-                        for p in [w.strip() for w in weeks_txt.split(",") if w.strip()]:
-                            try:
-                                w = int(p)
-                                if 1 <= w <= 53:
-                                    weken.append(w)
-                                else:
-                                    bad.append(p)
-                            except Exception:
+                if not weeks_txt.strip():
+                    errors.append("Vul ten minste één weeknummer in.")
+                else:
+                    for p in [w.strip() for w in weeks_txt.split(",") if w.strip()]:
+                        try:
+                            w = int(p)
+                            if 1 <= w <= 53:
+                                weken.append(w)
+                            else:
                                 bad.append(p)
+                        except Exception:
+                            bad.append(p)
 
-                    weken = sorted(list(dict.fromkeys(weken)))
+                weken = sorted(list(dict.fromkeys(weken)))
 
-                    if bad:
-                        errors.append(f"Ongeldige weeknummers: {', '.join(bad)} (toegestaan: 1..53)")
+                if bad:
+                    errors.append(
+                        f"Ongeldige weeknummers: {', '.join(bad)} (toegestaan: 1..53)"
+                    )
 
-                    if errors:
-                        for e in errors:
-                            st.error(e)
-                    else:
-                        base_id = next_id(st.session_state.orders)
-                        rows = []
+                if errors:
+                    for e in errors:
+                        st.error(e)
+                else:
+                    base_id = next_id(st.session_state.orders)
+                    rows = []
 
-                        for idx, w in enumerate(weken):
-                            rows.append({
-                                "id": base_id + idx,
-                                "customer_id": int(sel_customer),
-                                "product_id": int(sel_product),
-                                "quantity": int(amount),
-                                "sales_price": float(verkoop) if verkoop is not None else None,
-                                "week_number": int(w),
-                                "year": int(jaar),
-                            })
+                    for idx, w in enumerate(weken):
+                        rows.append({
+                            "id": base_id + idx,
+                            "customer_id": int(sel_customer),
+                            "product_id": int(sel_product),
+                            "quantity": int(amount),
+                            "sales_price": float(verkoop) if verkoop is not None else None,
+                            "week_number": int(w),
+                            "year": int(jaar),
+                        })
 
-                        st.session_state.orders = pd.concat(
-                            [st.session_state.orders, pd.DataFrame(rows)],
-                            ignore_index=True
-                        )
+                    st.session_state.orders = pd.concat(
+                        [st.session_state.orders, pd.DataFrame(rows)],
+                        ignore_index=True
+                    )
 
-                        st.session_state["last_customer_id"] = int(sel_customer)
-                        save_data()
-                        st.success(f"Toegevoegd: {len(rows)} order(s) voor weken: {', '.join(map(str, weken))}")
-                        st.rerun()
+                    st.session_state["last_customer_id"] = int(sel_customer)
+                    save_data()
+                    st.success(
+                        f"Toegevoegd: {len(rows)} order(s) voor weken: {', '.join(map(str, weken))}"
+                    )
+                    st.rerun()
 
-    with top_filter_col:
-        st.markdown("<div class='gpc-filter-card-marker'></div>", unsafe_allow_html=True)
-        st.markdown("<div class='gpc-section-title'>Filters</div>", unsafe_allow_html=True)
-        st.markdown("<div class='gpc-muted'>Filtert de tabel én de exports.</div>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="gpc-orders-toolbar">
+        <div class="gpc-toolbar-title">Filters</div>
+        <div class="gpc-toolbar-sub">Filtert tabel en export</div>
+    </div>
+    """, unsafe_allow_html=True)
 
+    f0, f1, f2, f3, f4, f5 = st.columns([2.2, 1.4, 1.4, 1.6, 0.9, 0.9])
+
+    with f0:
         q = st.text_input(
             "Zoeken",
             value="",
-            placeholder="Zoek in Customer, Supplier, Article of Description…"
+            placeholder="Customer, Supplier, Article..."
         )
-
-        f1, f2 = st.columns(2)
-        with f1:
-            flt_customer = st.multiselect(
-                "Customer",
-                options=sorted(base_df["Customer"].dropna().astype(str).unique().tolist())
-            )
-
-            flt_article = st.multiselect(
-                "Article",
-                options=sorted(base_df["Article"].dropna().astype(str).unique().tolist())
-            )
-
-            unique_weeks = sorted(base_df["Week"].dropna().astype(int).unique().tolist())
-            flt_weeks = st.multiselect("Week", options=unique_weeks)
-
-        with f2:
-            flt_supplier = st.multiselect(
-                "Supplier",
-                options=sorted(base_df["Supplier"].dropna().astype(str).unique().tolist())
-            )
-
-            unique_years = sorted(base_df["Year"].dropna().astype(int).unique().tolist())
-            flt_years = st.multiselect("Year", options=unique_years)
+    with f1:
+        flt_customer = st.multiselect(
+            "Customer",
+            options=sorted(base_df["Customer"].dropna().astype(str).unique().tolist())
+        )
+    with f2:
+        flt_supplier = st.multiselect(
+            "Supplier",
+            options=sorted(base_df["Supplier"].dropna().astype(str).unique().tolist())
+        )
+    with f3:
+        flt_article = st.multiselect(
+            "Article",
+            options=sorted(base_df["Article"].dropna().astype(str).unique().tolist())
+        )
+    with f4:
+        unique_years = sorted(base_df["Year"].dropna().astype(int).unique().tolist())
+        flt_years = st.multiselect("Year", options=unique_years)
+    with f5:
+        unique_weeks = sorted(base_df["Week"].dropna().astype(int).unique().tolist())
+        flt_weeks = st.multiselect("Week", options=unique_weeks)
 
     st.markdown("---")
 
@@ -1009,7 +986,7 @@ elif page == "Orders":
     if filtered_df.empty:
         st.info("Geen orders gevonden.")
     else:
-        st.markdown("### Orders")
+        st.subheader("📋 Orders")
 
         editor_df = filtered_df.copy()
         editor_df.insert(0, "Selecteer", False)
@@ -1051,19 +1028,18 @@ elif page == "Orders":
             use_container_width=True,
             hide_index=True,
             num_rows="fixed",
-            height=520,
             column_config={
                 "Selecteer": st.column_config.CheckboxColumn(),
-                "Customer": st.column_config.TextColumn(disabled=True, width="medium"),
-                "Article": st.column_config.TextColumn(disabled=True, width="large"),
-                "Description": st.column_config.TextColumn(disabled=True, width="medium"),
-                "Quantity": st.column_config.NumberColumn(min_value=0, step=1, width="small"),
-                "Purchase Price": st.column_config.NumberColumn(format="%.4f", width="small"),
-                "Sales Price": st.column_config.NumberColumn(format="%.2f", width="small"),
-                "Supplier": st.column_config.TextColumn(disabled=True, width="small"),
-                "Week": st.column_config.NumberColumn(min_value=1, max_value=53, step=1, width="small"),
+                "Customer": st.column_config.TextColumn(disabled=True),
+                "Article": st.column_config.TextColumn(disabled=True),
+                "Description": st.column_config.TextColumn(disabled=True),
+                "Quantity": st.column_config.NumberColumn(min_value=0, step=1),
+                "Purchase Price": st.column_config.NumberColumn(format="%.4f"),
+                "Sales Price": st.column_config.NumberColumn(format="%.2f"),
+                "Supplier": st.column_config.TextColumn(disabled=True),
+                "Week": st.column_config.NumberColumn(min_value=1, max_value=53, step=1),
                 "Week Start (Mon)": st.column_config.DateColumn(disabled=True),
-                "Year": st.column_config.NumberColumn(min_value=2020, max_value=2100, step=1, width="small"),
+                "Year": st.column_config.NumberColumn(min_value=2020, max_value=2100, step=1),
                 "Order ID": None,
                 "Customer ID": None,
                 "Product ID": None,
