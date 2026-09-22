@@ -29,94 +29,182 @@ st.set_page_config(page_title="GPC Orders Systeem", layout="wide")
 st.markdown("""
 <style>
 :root {
-    --gpc-green: #1f5a43;
-    --gpc-green-soft: #edf4f0;
-    --gpc-border: #d9e1dd;
+    --gpc-green: #17633f;
+    --gpc-green-dark: #10492f;
+    --gpc-green-soft: #eaf4ef;
+    --gpc-border: #d7dfdb;
     --gpc-text: #1f2937;
-    --gpc-muted: #6b7280;
-    --gpc-bg: #f6f8f7;
+    --gpc-muted: #667085;
+    --gpc-bg: #f5f7f6;
     --gpc-white: #ffffff;
 }
 
+/* Prevent the app from sitting under Streamlit's own top chrome */
+[data-testid="stHeader"] {
+    background: rgba(255,255,255,0.96);
+}
+.block-container {
+    padding-top: 4.5rem !important;
+    padding-bottom: 2rem !important;
+    max-width: 96% !important;
+}
+
+/* Overall page */
 .stApp {
     background: var(--gpc-bg);
+    color: var(--gpc-text);
 }
 
-.block-container {
-    padding-top: 1.4rem;
-    padding-bottom: 2rem;
-    max-width: 96%;
-}
-
-.gpc-app-header {
+/* Compact ERP-style title bar */
+.gpc-shell {
     background: var(--gpc-white);
     border: 1px solid var(--gpc-border);
     border-radius: 8px;
-    padding: 14px 18px;
+    padding: 14px 18px 12px 18px;
     margin-bottom: 10px;
 }
-
-.gpc-app-header h1 {
-    margin: 0;
+.gpc-shell-title {
+    font-size: 1.35rem;
+    font-weight: 750;
+    letter-spacing: -0.02em;
     color: var(--gpc-text);
-    font-size: 1.45rem;
-    font-weight: 700;
+    margin: 0;
     line-height: 1.15;
 }
-
-.gpc-app-header p {
-    margin: 4px 0 0 0;
+.gpc-shell-subtitle {
+    font-size: 0.82rem;
     color: var(--gpc-muted);
-    font-size: 0.86rem;
+    margin: 4px 0 0 0;
 }
 
+/* Main page headings */
+h1 {
+    font-size: 1.95rem !important;
+    letter-spacing: -0.03em !important;
+    margin-bottom: 0.55rem !important;
+}
+h2, h3 {
+    letter-spacing: -0.02em !important;
+}
+
+/* Navigation: make Streamlit radio look like application tabs */
+div[role="radiogroup"] {
+    display: flex !important;
+    gap: 0.15rem !important;
+    align-items: center !important;
+    background: var(--gpc-white) !important;
+    border: 1px solid var(--gpc-border) !important;
+    border-radius: 7px !important;
+    padding: 4px !important;
+    width: fit-content !important;
+}
+div[role="radiogroup"] label {
+    margin: 0 !important;
+    padding: 7px 13px !important;
+    border-radius: 5px !important;
+    cursor: pointer !important;
+    transition: 0.15s ease !important;
+}
+div[role="radiogroup"] label:hover {
+    background: #f3f6f4 !important;
+}
+div[role="radiogroup"] label:has(input:checked) {
+    background: var(--gpc-green-soft) !important;
+    color: var(--gpc-green-dark) !important;
+    font-weight: 700 !important;
+}
+div[role="radiogroup"] label > div:first-child {
+    display: none !important;
+}
+div[role="radiogroup"] label p {
+    margin: 0 !important;
+}
+
+/* Section labels */
 .gpc-section-title {
-    font-size: 1.05rem;
+    font-size: 1.02rem;
     font-weight: 700;
     color: var(--gpc-text);
-    margin: 0 0 0.35rem 0;
+    margin: 0 0 0.3rem 0;
 }
-
 .gpc-muted {
     color: var(--gpc-muted);
-    font-size: 0.84rem;
-    margin-top: -0.15rem;
+    font-size: 0.82rem;
+    margin-top: -0.1rem;
     margin-bottom: 0.65rem;
 }
 
+/* KPI cards */
 div[data-testid="stMetric"] {
     border: 1px solid var(--gpc-border);
-    border-radius: 8px;
-    padding: 10px 12px;
+    border-radius: 7px;
+    padding: 11px 13px;
     background: var(--gpc-white);
-    box-shadow: none;
+    box-shadow: 0 1px 2px rgba(16,24,40,0.03);
+}
+div[data-testid="stMetricLabel"] {
+    color: var(--gpc-muted);
+}
+div[data-testid="stMetricValue"] {
+    color: var(--gpc-text);
 }
 
+/* Inputs */
+div[data-baseweb="select"] > div,
+input,
+textarea,
+div[data-testid="stNumberInput"] input {
+    border-radius: 5px !important;
+}
+div[data-testid="stTextInput"] input,
+div[data-testid="stNumberInput"] input,
+div[data-testid="stSelectbox"] > div > div,
+div[data-testid="stMultiSelect"] > div > div {
+    min-height: 2.45rem !important;
+}
+
+/* Buttons */
 .stButton > button,
 .stDownloadButton > button {
-    border-radius: 6px;
-    font-weight: 600;
-    min-height: 2.35rem;
+    border-radius: 5px !important;
+    min-height: 2.35rem !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+}
+.stButton > button[kind="primary"] {
+    background: var(--gpc-green) !important;
+    border-color: var(--gpc-green) !important;
 }
 
+/* Tables */
 div[data-testid="stDataFrame"],
 div[data-testid="stDataEditor"] {
     border: 1px solid var(--gpc-border);
-    border-radius: 8px;
+    border-radius: 7px;
     overflow: hidden;
     background: var(--gpc-white);
 }
 
-div[data-baseweb="select"] > div,
-input,
-textarea {
-    border-radius: 6px !important;
+/* Forms / expander */
+div[data-testid="stForm"] {
+    background: var(--gpc-white);
+    border: 1px solid var(--gpc-border);
+    border-radius: 7px;
+    padding: 14px 14px 10px 14px;
+}
+details {
+    border-radius: 7px !important;
 }
 
+/* Remove excessive separators */
 hr {
-    margin-top: 0.9rem;
-    margin-bottom: 0.9rem;
-    border-color: var(--gpc-border);
+    margin: 0.8rem 0 1rem 0 !important;
+    border-color: var(--gpc-border) !important;
+}
+
+/* Compact captions */
+[data-testid="stCaptionContainer"] {
+    color: var(--gpc-muted);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -610,39 +698,37 @@ def _excel_export_bytes(df: pd.DataFrame, title: str) -> BytesIO:
 user = login_panel()
 ensure_state()
 
-st.markdown("""
-<div class="gpc-app-header">
-    <h1>GPC Orders</h1>
-    <p>Order Management System</p>
-</div>
-""", unsafe_allow_html=True)
+header_left, header_right = st.columns([5.6, 2.4])
 
-top_left, top_right = st.columns([5.8, 2.2])
+with header_left:
+    st.markdown("""
+    <div class="gpc-shell">
+        <div class="gpc-shell-title">GPC Orders</div>
+        <div class="gpc-shell-subtitle">Order Management System</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-with top_left:
-    page = st.radio(
-        "Navigatie",
-        ["Dashboard", "Orders", "Klanten", "Producten"],
-        horizontal=True,
-        label_visibility="collapsed",
-        key="top_navigation"
-    )
-
-with top_right:
+with header_right:
+    st.write("")
     user_col, save_col, logout_col = st.columns([1.5, 1, 1])
-
     with user_col:
         st.caption(f"👤 **{user['name']}**")
-
     with save_col:
-        if st.button("Opslaan", use_container_width=True):
+        if st.button("Opslaan", use_container_width=True, key="top_save"):
             save_data()
             st.success("Opgeslagen.")
-
     with logout_col:
-        if st.button("Uitloggen", use_container_width=True):
+        if st.button("Uitloggen", use_container_width=True, key="top_logout"):
             st.session_state["auth_user"] = None
             st.rerun()
+
+page = st.radio(
+    "Navigatie",
+    ["Dashboard", "Orders", "Klanten", "Producten"],
+    horizontal=True,
+    label_visibility="collapsed",
+    key="top_navigation"
+)
 
 st.markdown("---")
 
@@ -718,7 +804,7 @@ elif page == "Orders":
 
     base_df = build_orders_display_df()
 
-    top_order_col, top_filter_col = st.columns([1, 1], gap="large")
+    top_order_col, top_filter_col = st.columns([1, 1], gap="medium")
 
     with top_order_col:
         st.markdown("<div class='gpc-section-title'>Nieuwe order</div>", unsafe_allow_html=True)
