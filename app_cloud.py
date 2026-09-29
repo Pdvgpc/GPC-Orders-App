@@ -250,34 +250,70 @@ def _gh_get_text(path_in_repo: str) -> Optional[str]:
     st.error(f"GitHub leesfout {r.status_code}: {r.text[:200]}")
     return ""
 
-def _gh_put_text(path_in_repo: str, content_text: str, msg: str):
+def _gh_put_text(path_in_repo: str, content_text: str, msg: str, max_retries: int = 3) -> bool:
+    """
+    Schrijft een tekstbestand naar GitHub.
+    Bij een 409-conflict wordt de actuele SHA opnieuw opgehaald en de write opnieuw geprobeerd.
+    """
     url = _gh_api(f"/contents/{path_in_repo}")
+    encoded_content = base64.b64encode(content_text.encode("utf-8")).decode("ascii")
 
-    try:
-        r = requests.get(url, headers=_gh_headers(), timeout=10)
-    except Exception as e:
-        st.error(f"GitHub schrijf-verbinding mislukt (voor lezen sha): {e}")
-        return
+    for attempt in range(1, max_retries + 1):
+        try:
+            r = requests.get(
+                url,
+                headers=_gh_headers(),
+                params={"ref": "main"},
+                timeout=10
+            )
+        except Exception as e:
+            st.error(f"GitHub verbinding mislukt bij lezen van {path_in_repo}: {e}")
+            return False
 
-    sha = r.json().get("sha") if r.status_code == 200 else None
+        if r.status_code == 200:
+            current_sha = r.json().get("sha")
+        elif r.status_code == 404:
+            current_sha = None
+        else:
+            st.error(f"GitHub leesfout {r.status_code} bij {path_in_repo}: {r.text[:200]}")
+            return False
 
-    payload = {
-        "message": msg,
-        "content": base64.b64encode(content_text.encode("utf-8")).decode("ascii"),
-        "branch": "main",
-    }
+        payload = {
+            "message": msg,
+            "content": encoded_content,
+            "branch": "main",
+        }
 
-    if sha:
-        payload["sha"] = sha
+        if current_sha:
+            payload["sha"] = current_sha
 
-    try:
-        r2 = requests.put(url, headers=_gh_headers(), data=json.dumps(payload), timeout=10)
-    except Exception as e:
-        st.error(f"GitHub schrijf-verbinding mislukt: {e}")
-        return
+        try:
+            r2 = requests.put(
+                url,
+                headers=_gh_headers(),
+                json=payload,
+                timeout=10
+            )
+        except Exception as e:
+            st.error(f"GitHub schrijfverbinding mislukt bij {path_in_repo}: {e}")
+            return False
 
-    if r2.status_code not in (200, 201):
-        st.error(f"GitHub schrijffout {r2.status_code}: {r2.text[:200]}")
+        if r2.status_code in (200, 201):
+            return True
+
+        if r2.status_code == 409 and attempt < max_retries:
+            continue
+
+        if r2.status_code == 409:
+            st.error(
+                f"GitHub conflict bij {path_in_repo}. "
+                "Het bestand is ondertussen opnieuw gewijzigd. Probeer nogmaals."
+            )
+        else:
+            st.error(f"GitHub schrijffout {r2.status_code} bij {path_in_repo}: {r2.text[:200]}")
+        return False
+
+    return False
 
 def _gh_get_csv(path_in_repo: str) -> Optional[pd.DataFrame]:
     txt = _gh_get_text(path_in_repo)
@@ -293,9 +329,9 @@ def _gh_get_csv(path_in_repo: str) -> Optional[pd.DataFrame]:
     except Exception:
         return pd.DataFrame()
 
-def _gh_put_csv(path_in_repo: str, df: pd.DataFrame, msg: str):
+def _gh_put_csv(path_in_repo: str, df: pd.DataFrame, msg: str) -> bool:
     csv_txt = df.to_csv(index=False)
-    _gh_put_text(path_in_repo, csv_txt, msg)
+    return _gh_put_text(path_in_repo, csv_txt, msg)
 
 
 def load_auth() -> dict:
@@ -420,17 +456,38 @@ def load_data():
     })
     st.session_state.orders = ords
 
-def save_data():
+def save_data() -> bool:
     repo_dir = SEC.get("DATA_DIR", "data")
+    results = []
 
     if "products" in st.session_state:
-        _gh_put_csv(f"{repo_dir}/products.csv", st.session_state.products, "update products.csv")
+        results.append(
+            _gh_put_csv(
+                f"{repo_dir}/products.csv",
+                st.session_state.products,
+                "update products.csv"
+            )
+        )
 
     if "customers" in st.session_state:
-        _gh_put_csv(f"{repo_dir}/customers.csv", st.session_state.customers, "update customers.csv")
+        results.append(
+            _gh_put_csv(
+                f"{repo_dir}/customers.csv",
+                st.session_state.customers,
+                "update customers.csv"
+            )
+        )
 
     if "orders" in st.session_state:
-        _gh_put_csv(f"{repo_dir}/orders.csv", st.session_state.orders, "update orders.csv")
+        results.append(
+            _gh_put_csv(
+                f"{repo_dir}/orders.csv",
+                st.session_state.orders,
+                "update orders.csv"
+            )
+        )
+
+    return all(results) if results else True
 
 def ensure_state():
     if "products" not in st.session_state or "customers" not in st.session_state or "orders" not in st.session_state:
@@ -727,8 +784,8 @@ with nav_right:
         st.caption(f"👤 **{user['name']}**")
     with save_col:
         if st.button("Opslaan", type="primary", use_container_width=True, key="top_save"):
-            save_data()
-            st.success("Opgeslagen.")
+            if save_data():
+                st.success("Opgeslagen.")
     with logout_col:
         if st.button("Uitloggen", use_container_width=True, key="top_logout"):
             st.session_state["auth_user"] = None
